@@ -50,7 +50,7 @@ public age?: string
 
 - 要把后端给的字段名作为 `name` 的属性值，而不是把自定义字段名作为属性值
 - `name` 配置能让接受数据和输出数据时使用的字段名保持一致，只有在前端操作的时候使用自定义的字段名
-- 若接受数据和输出数据时使用的字段名不一致，请参考 [`aliasName`](/column/aliasName/README.md)
+- 如果只需要兼容额外的输入字段名，请参考 [`aliasName`](/column/aliasName/)。
 
 ## 测试
 

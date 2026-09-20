@@ -2,34 +2,28 @@
 permalink: /method/getColumnData/
 ---
 
-# getColumnData 获取字段元数据
+# 按字段名读取值
 
-## 说明
+`getColumnData(key)` 根据运行时字段名读取模型属性。它读取的是字段值，不是 `@Column`
+元数据。静态字段名已知时应优先直接访问属性。
 
-一般用于遍历获取列数据
+```ts
+user.getColumnData('displayName')
+// 等价于 user.displayName
+```
 
-## 案例
+该方法主要用于动态表单、表格列配置和其他无法在编译期确定字段名的场景。
 
-::: tabs
-
-@tab 案例一
-
-### 模型
+## 可运行示例
 
 ```ts :no-line-numbers
 <!-- @include: ./init.spec.ts#model -->
 ```
 
-### 实例初始化
-
 ```ts :no-line-numbers
 <!-- @include: ./init.spec.ts#instance -->
 ```
 
-### 打印日志
-
 ```ts :no-line-numbers
 <!-- @include: ./init.spec.ts#log -->
 ```
-
-:::

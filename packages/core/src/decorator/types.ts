@@ -75,7 +75,7 @@ export type TSerializableParam = {
   /** 仅序列化指定分组 */
   group?: string
   /** 排除指定分组 */
-  excludeGroup?: string
+  excludeGroup?: string | string[]
   /** 是否去除字符串首尾空格 */
   trim?: boolean
   /** 是否使用驼峰命名 */
@@ -235,8 +235,6 @@ export interface IModelProps {
  * 创建或更新模型实例时的配置参数。
  */
 export interface IModelOptions extends IModelProps {
-  /** 仅对当前模型实例生效的配置（不影响嵌套模型） */
-  current?: IModelProps
   /** 分组标识，用于选择性序列化/反序列化 */
   group?: string
   /** 排除的分组标识 */
@@ -255,16 +253,4 @@ export interface IModelOptions extends IModelProps {
 export interface IDataModel extends IModelProps {
   /** 自定义方法映射 */
   methods?: { [key: string]: any }
-}
-
-/**
- * 模型更新选项
- */
-export interface IModelUpdateOptions {
-  /** 分组标识 */
-  group?: string
-  /** 排除的分组标识 */
-  excludeGroup?: string
-  /** 仅对当前模型实例生效的配置 */
-  current?: IModelProps
 }

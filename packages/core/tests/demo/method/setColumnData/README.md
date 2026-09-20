@@ -2,36 +2,28 @@
 permalink: /method/setColumnData/
 ---
 
-# setColumnData 设置字段元数据
+# 按字段名设置值
 
-## 说明
+`setColumnData(key, value)` 根据运行时字段名更新模型属性，并返回当前模型以支持链式调用。
+它不会修改 `@Column` 元数据。
 
-### 作用
+```ts
+user.setColumnData('displayName', 'Ada')
+// 等价于 user.displayName = 'Ada'
+```
 
-一般用于遍历设置列数据，避免出现类型检查的错误提示
+静态字段名已知时应优先直接赋值；动态表单或配置驱动的字段更新可以使用本方法。
 
-## 案例
-
-::: tabs
-
-@tab 案例一
-
-### 模型
+## 可运行示例
 
 ```ts :no-line-numbers
 <!-- @include: ./init.spec.ts#model -->
 ```
 
-### 实例初始化
-
 ```ts :no-line-numbers
 <!-- @include: ./init.spec.ts#instance -->
 ```
 
-### 打印日志
-
 ```ts :no-line-numbers
 <!-- @include: ./init.spec.ts#log -->
 ```
-
-:::

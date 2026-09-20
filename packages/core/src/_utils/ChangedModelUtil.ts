@@ -69,7 +69,7 @@ export function getChange(
   targetData: any,
   params: {
     group?: string
-    excludeGroup?: string
+    excludeGroup?: string | string[]
     trim?: boolean
     descriptor?: boolean
     clean?: CLEAN_ENUM
@@ -104,6 +104,9 @@ export function getChange(
       }
     }
   }
+  // The snapshot is stored in a WeakMap. Resolve it once rather than doing the
+  // same WeakMap lookup for every column in a model.
+  const originalData = target.getOriginalData()
   Object.keys(columns).forEach((columnName) => {
     let orgColumn = columns[columnName].name
     const emptyValueRaw = columns[columnName].emptyValue as string | (() => any)
@@ -115,7 +118,7 @@ export function getChange(
     if (columns[columnName].trim && params.trim && typeof currentValue === 'string') {
       currentValue = (currentValue as string).trim()
     }
-    let oldValue = target.getOriginalData()[orgColumn]
+    let oldValue = originalData[orgColumn]
     if (columns[columnName].trim && params.trim && typeof oldValue === 'string') {
       oldValue = (oldValue as string).trim()
     }
@@ -304,7 +307,8 @@ export function getChange(
     } else if (typeof params.excludeGroup !== 'undefined') {
       // 如果有分组，必须返回分组中的数据。
       // 此处的逻辑是把非当前分组的数据剔除掉。
-      if (columns[columnName].group && columns[columnName].group?.indexOf(params.excludeGroup as string) !== -1) {
+      const excludedGroups = Array.isArray(params.excludeGroup) ? params.excludeGroup : [params.excludeGroup]
+      if (columns[columnName].group && excludedGroups.some((group) => columns[columnName].group?.includes(group))) {
         if (params && params.descriptor) {
           delete descriptorObj[orgColumn]
         } else {

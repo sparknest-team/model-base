@@ -50,22 +50,30 @@ export function modelToSerializableObj<T extends ModelBase>(
         : NAMING_STRATEGIES.snakeCase
       : null) ?? getModelProps(this_, 'serializeNamingStrategies')
   const dto: { [index: string]: any } = {}
-  const columns = ((this_ as ModelBase).getColumns?.() as { [key: string]: IColumnInner }) || {}
+  // Column metadata is immutable after a model class has been initialized. Reuse
+  // the constructor-level cache instead of deep-merging decorator metadata on
+  // every serialization (including every nested child serialization).
+  const columns =
+    (((getModelProps(this_, 'columnsInValue')
+      ? (this_ as ModelBase).getColumns?.()
+      : (this_ as ModelBase).getColumnsCached?.()) as { [key: string]: IColumnInner }) || {})
   const target = this_ as T
   for (const key in columns) {
     if (columns.hasOwnProperty(key)) {
       const value = target[key] as any
       const isUndefined = value === void 0
       const isNull = value === null
-      const isEmptyString = typeof value === 'string' && value.replace(/\s/g, '') === ''
-      const isEmptyArray = Array.isArray(value) && value.length === 0
-      const isEmptyObject = isPlainObject(value) && Object.keys(value).length === 0
-      let isEmpty = isUndefined || isNull || isEmptyString || isEmptyArray || isEmptyObject
+      let isEmpty: boolean
       if (params.clean === CLEAN_ENUM.CLEAN_UNDEFINED) {
         isEmpty = isUndefined
       } else if (params.clean === CLEAN_ENUM.CLEAN_UNDEFINED_AND_NULL) {
         isEmpty = isUndefined || isNull
-      } else if (params.clean === CLEAN_ENUM.CLEAN_DIRTY) {
+      } else {
+        // The more expensive string/object checks are only needed by CLEAN_DIRTY
+        // (and preserve the historical default behavior when clean is omitted).
+        const isEmptyString = typeof value === 'string' && value.trim() === ''
+        const isEmptyArray = Array.isArray(value) && value.length === 0
+        const isEmptyObject = isPlainObject(value) && Object.keys(value).length === 0
         isEmpty = isUndefined || isNull || isEmptyString || isEmptyArray || isEmptyObject
       }
       const serializeName = getColumnSerializeName(columns[key], sns)
@@ -107,7 +115,7 @@ export function modelToSerializableObj<T extends ModelBase>(
       } else {
         let value = target[key]
         // 处理any类型的数据，解除对普通对象的数据的引用。
-        if (typeof value !== 'undefined' && value !== null) {
+        if (typeof value === 'object' && value !== null) {
           value = cloneDeep(value)
         }
         const serialize = columns[key].unformatter || columns[key].serialize

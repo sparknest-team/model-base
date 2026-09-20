@@ -6,7 +6,7 @@ import codeBlockPlugin from './plugin-code-block/src/node'
 
 export default defineUserConfig({
   title: 'ModelBase',
-  description: 'ModelBase是一个被后端团队不断锤炼出来的一个小工具，目标是想一行代码来解决前端处理数据的痛苦的方式',
+  description: '面向 TypeScript 应用的数据模型、序列化与变更追踪工具',
   // base: (process.env.FX_BASE || '/') as any,
   base: '/' as any,
   port: 8080,

@@ -14,11 +14,10 @@ import type {
   IColumnDeserialize,
   IColumnInner,
   IModelOptions,
-  IModelUpdateOptions,
 } from '../decorator/types'
 import { ModelBase } from '../model/ModelBase'
 import { deserializeRecord, deserializeRecordArray } from '../tools/methods'
-import { create } from './create'
+import { create, getModelType } from './create'
 import { getColumnSerializeName } from './getColumnSerializeName'
 import { getModelProps } from './ModelBaseProps'
 
@@ -69,8 +68,9 @@ function getDeserializeDtoValue<T extends ModelBase>(
   dto: any,
   field: IColumnInner<T>,
   options?: IModelOptions,
+  namingStrategy?: IModelOptions['deserializeNamingStrategies'],
 ) {
-  const dns = getModelProps(model, 'deserializeNamingStrategies', options?.current)
+  const dns = namingStrategy ?? getModelProps(model, 'deserializeNamingStrategies')
   let retData: any
 
   // 根据命名策略查找主名称
@@ -139,7 +139,7 @@ function genColumnDefault<T extends ModelBase>(
   key: string,
   options?: IModelOptions,
 ) {
-  const sns = getModelProps(model, 'serializeNamingStrategies', options?.current)
+  const sns = getModelProps(model, 'serializeNamingStrategies')
   if (typeof column.default === 'function') {
     const paramsDefault: IColumnDefault<T> = {
       name: getColumnSerializeName(column, sns),
@@ -216,12 +216,14 @@ function getDeserializeValue<T extends ModelBase>(
   column: IColumnInner<T>,
   modelDTO: any,
   options?: IModelOptions,
+  resolvedDtoValue?: { value: any },
 ) {
-  const sns = getModelProps(model, 'deserializeNamingStrategies', options?.current)
   const deserialize = column.deserialize || column.formatter
+  const dtoValue = resolvedDtoValue ? resolvedDtoValue.value : getDeserializeDtoValue(model, modelDTO, column, options)
   if (typeof deserialize === 'function') {
+    const sns = getModelProps(model, 'deserializeNamingStrategies')
     const paramsDeserialize: IColumnDeserialize<T> = {
-      value: getDeserializeDtoValue(model, modelDTO, column, options),
+      value: dtoValue,
       name: getColumnSerializeName(column, sns),
       property: column.property,
       serializeData: modelDTO,
@@ -229,7 +231,7 @@ function getDeserializeValue<T extends ModelBase>(
     }
     return deserialize.apply(model, [paramsDeserialize])
   } else {
-    return getDeserializeDtoValue(model, modelDTO, column)
+    return dtoValue
   }
 }
 
@@ -256,23 +258,23 @@ export function createChildField<T extends ModelBase>(
   key: keyof T,
   modelDTO: any,
   options?: IModelOptions,
+  resolvedDtoValue?: { value: any },
 ) {
-  const deserializeValue = getDeserializeValue(model, field, modelDTO, options)
+  const deserializeValue = getDeserializeValue(model, field, modelDTO, options, resolvedDtoValue)
+  const childType = getModelType(field.childType)
   if (Array.isArray(deserializeValue)) {
-    const arr: any[] = (() => {
-      return []
-    })()
+    const arr: any[] = []
     deserializeValue.forEach((itemDTO: any) => {
-      arr.push(create<T>(field.childType)(itemDTO, options))
+      arr.push(childType.create(itemDTO, options) as T)
     })
     return arr
   } else {
     if (field.type === 'record') {
-      return deserializeRecord(field.childType, deserializeValue, options)
+      return deserializeRecord(childType as any, deserializeValue, options)
     } else if (field.type === 'recordArray') {
-      return deserializeRecordArray(field.childType, deserializeValue, options)
+      return deserializeRecordArray(childType as any, deserializeValue, options)
     }
-    return create<T>(field.childType)(deserializeValue, options)
+    return childType.create(deserializeValue, options) as T
   }
 }
 
@@ -359,29 +361,36 @@ function initField<T extends ModelBase>(
   columns: { [key: string]: IColumnInner<T> },
   data: any,
   options?: IModelOptions,
+  namingStrategy?: IModelOptions['deserializeNamingStrategies'],
 ) {
   const field = columns[columnName as string]
-  const columnDto = getDeserializeDtoValue(model, data, field)
+  const columnDto = getDeserializeDtoValue(model, data, field, options, namingStrategy)
   if (flag === 'create') {
     if (typeof columnDto !== 'undefined') {
       if (field.childType) {
-        ;(model as any)[columnName] = createChildField<T>(model, field, columnName, data, options)
+        ;(model as any)[columnName] = createChildField<T>(model, field, columnName, data, options, {
+          value: columnDto,
+        })
       } else {
-        if (Array.isArray(getDeserializeDtoValue(model, data, field))) {
-          ;(model as any)[columnName] = getDeserializeValue<T>(model, field, cloneDeep(data))
+        if (Array.isArray(columnDto)) {
+          // Preserve the historical no-shared-reference behavior without cloning
+          // the entire DTO just to read one array field.
+          ;(model as any)[columnName] = cloneDeep(
+            getDeserializeValue<T>(model, field, data, options, { value: columnDto }),
+          )
         } else {
-          ;(model as any)[columnName] = getDeserializeValue<T>(model, field, data)
+          ;(model as any)[columnName] = getDeserializeValue<T>(model, field, data, options, { value: columnDto })
         }
       }
     } else {
-      if (!getModelProps(model, 'noDefault', options?.current)) {
+      if (!getModelProps(model, 'noDefault')) {
         setDefault<T>(model, field, columnName, data, options)
       }
     }
   } else if (flag === 'update') {
     if (typeof columnDto !== 'undefined') {
       if (field.childType) {
-        if (Array.isArray(getDeserializeDtoValue(model, data, field))) {
+        if (Array.isArray(columnDto)) {
           updateArrField<T>(field, model, columnName, data, options)
         } else if (field.foreign) {
           updateForeign<T>(field, model, columnName, data, columnDto, options)
@@ -406,23 +415,21 @@ function setModelByDTO<T extends ModelBase>(
   modelDTO: any,
   options?: IModelOptions,
 ) {
+  // Naming strategy is invariant for all fields in one initialization pass.
+  // Resolve it once instead of walking instance/class/default options per field.
+  const namingStrategy = getModelProps(model, 'deserializeNamingStrategies')
   for (const key in props) {
     if (props.hasOwnProperty(key)) {
-      // 如果没有分组，或者符合当前分组的时候，需要赋值。
-      if (
-        (typeof options?.group !== 'undefined' &&
-          props[key].group &&
-          props[key].group?.indexOf(options?.group as string) !== -1) ||
-        !options?.group
-      ) {
-        initField<T>(flag, key as keyof T, model, props, modelDTO, options)
-      } else if (
-        (typeof options?.excludeGroup !== 'undefined' &&
-          props[key].group &&
-          props[key].group?.indexOf(options?.excludeGroup as string) === -1) ||
-        !options?.group
-      ) {
-        initField<T>(flag, key as keyof T, model, props, modelDTO, options)
+      const groups = props[key].group
+      let included = true
+      if (typeof options?.group !== 'undefined') {
+        // group has higher priority; excludeGroup is ignored when both exist.
+        included = !groups || groups.includes(options.group)
+      } else if (typeof options?.excludeGroup !== 'undefined') {
+        included = !groups?.includes(options.excludeGroup)
+      }
+      if (included) {
+        initField<T>(flag, key as keyof T, model, props, modelDTO, options, namingStrategy)
       }
     }
   }
@@ -444,7 +451,7 @@ export function createModelByDTO<T extends ModelBase>(model: T, props: any, dto:
   setModelByDTO('create', model, props, modelDTO, options)
   model.saveChangedData({
     group: options?.group,
-    enableDataState: getModelProps(model, 'enableDataState', options?.current),
+    enableDataState: getModelProps(model, 'enableDataState'),
   })
 }
 
@@ -475,11 +482,8 @@ export function extendModelByDTO<T extends ModelBase>(model: T, props: any, dto:
  * @param dto - 更新的 DTO 数据
  * @param options - 模型选项
  */
-export function updateModelByDTO<T extends ModelBase>(model: T, props: any, dto: any, options?: IModelUpdateOptions) {
+export function updateModelByDTO<T extends ModelBase>(model: T, props: any, dto: any) {
   const modelDTO: { [index: string]: any } = dto || {}
-  setModelByDTO('update', model, props, modelDTO, options)
-  model.saveChangedData({
-    group: options?.group,
-    enableDataState: getModelProps(model, 'enableDataState', options?.current),
-  })
+  setModelByDTO('update', model, props, modelDTO)
+  model.saveChangedData({ enableDataState: getModelProps(model, 'enableDataState') })
 }

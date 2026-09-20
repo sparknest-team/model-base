@@ -54,5 +54,16 @@ describe('Group getChangedData', () => {
         empty_group: '1',
       })
     })
+    it('group takes priority over excludeGroup', () => {
+      const c = new GroupData({ data1: 'old1', data3: 'old3', data4: 'old4' })
+      c.data1 = 'new1'
+      c.data3 = 'new3'
+      c.data4 = 'new4'
+
+      expect(c.getChangedData({ group: 'group1', excludeGroup: 'group1' })).toEqual({
+        data1: 'new1',
+        data3: 'new3',
+      })
+    })
   })
 })

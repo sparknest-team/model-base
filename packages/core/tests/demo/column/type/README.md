@@ -38,4 +38,4 @@ permalink: /column/type/
 
 - <span style="color:red">不需要传入，但是要正确的声明</span>，通过 Reflect.getMetadata('design:type', target, property)自动读取
 - 支持的数据类型**Array**、**Object**、**Number**、**String**、**Boolean**、**Map**、**WeakMap**、**Set**、**WeakSet**、**Symbol**、**Function**、**File**、**Any**
-- **Array**、**Object**的特殊用法请参考 [`model`](/column/model/README.md)
+- 数组和对象的嵌套模型用法请参考[嵌套模型](/column/model/)。

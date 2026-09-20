@@ -55,10 +55,7 @@ export interface IDataByOriginalOption extends IModelOptions {
 
 function callMethod(
   this_: any,
-  param: {
-    method: string
-    camelCase?: boolean
-  },
+  param: { method: string },
 ) {
   const target = toRaw(this_)
   const columns = target.getColumnsCached() as { [key: string]: IColumnInner }
@@ -142,7 +139,7 @@ export class ModelBase {
     options?: IModelOptions,
   ) {
     const t_ = toRaw(this)
-    const options_ = options || {}
+    const options_ = { ...(options || {}) }
     options_.__isInit = true
     options_.__noDeserialize = true
     options_.noDefault = true
@@ -160,7 +157,8 @@ export class ModelBase {
     ...rest: any
   ) {
     const t_ = toRaw(this)
-    const options_ = options || {}
+    // Internal flags must never be written into the caller's options object.
+    const options_ = { ...(options || {}) }
     options_.__isInit = true
     const t__ = new t_(dto, options_, rest)
     createModelByDTO<T>(t__, (t__ as ModelBase).getColumnsCached(), dto, options_)
@@ -225,10 +223,7 @@ export class ModelBase {
 
   public static callMethod(
     data: ModelBase | ModelBase[],
-    params: {
-      method: string
-      camelCase?: boolean
-    },
+    params: { method: string },
   ) {
     data = toRaw(data)
     if (Array.isArray(data)) {
@@ -244,7 +239,7 @@ export class ModelBase {
     }
   }
 
-  public callMethod(params: { method: string; camelCase?: boolean }) {
+  public callMethod(params: { method: string }) {
     callMethod(toRaw(this), params)
   }
 
@@ -362,7 +357,12 @@ export class ModelBase {
    * @description 当前对象相对于保存点是否有变化。
    * ignoreEmptyString undefined 变为 '' 视为没有变化
    */
-  public isChanged(params?: { group?: string; excludeGroup?: string; trim?: boolean; ignoreEmptyString?: boolean }) {
+  public isChanged(params?: {
+    group?: string
+    excludeGroup?: string | string[]
+    trim?: boolean
+    ignoreEmptyString?: boolean
+  }) {
     const t_ = toRaw(this)
     return Object.keys(t_.getChangedData(params)).length !== 0
   }
@@ -370,9 +370,9 @@ export class ModelBase {
   /**
    * @description 变更保存点，将当前的数据作为最新的保存点。
    */
-  public saveChangedData(param?: { group?: string; excludeGroup?: string; enableDataState?: boolean }) {
+  public saveChangedData(param?: { group?: string; excludeGroup?: string | string[]; enableDataState?: boolean }) {
     const t_ = toRaw(this)
-    const enableDs = getModelProps(t_, 'enableDataState', param)
+    const enableDs = param?.enableDataState ?? getModelProps(t_, 'enableDataState')
     if (enableDs) {
       const dto_ = modelToSerializableObj(t_, {
         group: param?.group,
@@ -399,7 +399,7 @@ export class ModelBase {
    */
   public getCleanSerializableObject(params?: {
     group?: string
-    excludeGroup?: string
+    excludeGroup?: string | string[]
     camelCase?: boolean
     trim?: boolean
   }) {
@@ -421,7 +421,7 @@ export class ModelBase {
   public getSerializableObject(params?: {
     trim?: boolean
     group?: string
-    excludeGroup?: string
+    excludeGroup?: string | string[]
     clean?: CLEAN_ENUM
     camelCase?: boolean
     enableEmptyValue?: boolean
@@ -443,7 +443,7 @@ export class ModelBase {
    */
   public getCleanSerializableString(param?: {
     group?: string
-    excludeGroup?: string
+    excludeGroup?: string | string[]
     trim?: boolean
     camelCase?: boolean
   }) {
@@ -454,7 +454,12 @@ export class ModelBase {
   /**
    * @description 获得可被序列化的 string 字符串，这个没有字符串去除了 空字符 空对象 空数组。
    */
-  public getSerializableString(param?: { group?: string; excludeGroup?: string; trim?: boolean; camelCase?: boolean }) {
+  public getSerializableString(param?: {
+    group?: string
+    excludeGroup?: string | string[]
+    trim?: boolean
+    camelCase?: boolean
+  }) {
     const t_ = toRaw(this)
     return JSON.stringify(t_.getSerializableObject(param))
   }
@@ -466,7 +471,7 @@ export class ModelBase {
    */
   public getChangedData(params?: {
     group?: string
-    excludeGroup?: string
+    excludeGroup?: string | string[]
     trim?: boolean
     clean?: CLEAN_ENUM
     descriptor?: boolean
@@ -489,7 +494,7 @@ export class ModelBase {
    */
   public getChangedDescriptor(params?: {
     group?: string
-    excludeGroup?: string
+    excludeGroup?: string | string[]
     trim?: boolean
     clean?: CLEAN_ENUM
     ignoreEmptyString?: boolean
@@ -530,9 +535,8 @@ export class ModelBase {
    * @deprecated 请使用mergeModel
    * @description 当前模型的key对应的值存在，就会覆盖。
    * @param model
-   * @param options 待拓展
    */
-  public extendModel(model: ModelBase, options?: any) {
+  public extendModel(model: ModelBase) {
     model = toRaw(model)
     const newModel = deepCopy(model)
     const t_ = toRaw(this)

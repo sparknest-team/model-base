@@ -159,7 +159,7 @@ user.getSerializableObject({ camelCase: true })
 
 - instance: 支持`new`时候传入`IModelProps`，作用域在当前实例上生效。
 
-- init: 在`new`的时候传入`IModelProps.current`属性，作用域在初始化阶段生效。
+- instance: 在 `new/create` 时直接传入配置，只影响本次创建的模型树，不影响其他实例或全局行为。
 
 ```ts
 interface IModelProps {

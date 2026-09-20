@@ -2,7 +2,7 @@
  * 模型配置属性管理
  *
  * 提供模型选项的存储、获取和默认值处理。
- * 配置优先级：运行时参数 > 实例级配置 > 类级配置 > 全局默认值
+ * 配置优先级：实例级配置 > 类级配置 > 库默认值
  *
  * @author shuai.meng
  * @since 2017/8/2
@@ -55,8 +55,8 @@ export class ModelOptions implements IModelOptions {
       this.enableDataState = options.enableDataState
       this.keepModelName = options.keepModelName
       this.columnsInValue = options.columnsInValue
-      this.deserializeNamingStrategies = options.deserializeNamingStrategies || NAMING_STRATEGIES.mix
-      this.serializeNamingStrategies = options.serializeNamingStrategies || NAMING_STRATEGIES.snakeCase
+      this.deserializeNamingStrategies = options.deserializeNamingStrategies
+      this.serializeNamingStrategies = options.serializeNamingStrategies
       this.group = options.group
       this.excludeGroup = options.excludeGroup
     }
@@ -81,22 +81,19 @@ const defaultModelOptions: IModelProps = {
  * 获取模型属性配置值
  *
  * 按以下优先级获取配置：
- * 1. current（运行时传入的临时配置）
- * 2. 实例级配置（__MODEL_PROPS__）
- * 3. 类级配置（@DataModel 装饰器配置的 __MODEL__）
- * 4. 全局默认值
+ * 1. 实例级配置（__MODEL_PROPS__）
+ * 2. 类级配置（@DataModel 装饰器配置的 __MODEL__）
+ * 3. 库默认值
  *
  * 性能优化：默认值在此函数中兜底，避免在 ModelBase 构造函数中初始化。
  *
  * @param t_ - 模型实例
  * @param prop - 属性名
- * @param current - 运行时的临时配置（可选）
  * @returns 配置属性值
  */
-export function getModelProps<T extends ModelBase>(t_: T, prop: keyof IModelProps, current?: IModelProps) {
+export function getModelProps<T extends ModelBase>(t_: T, prop: keyof IModelProps) {
   const t__ = toRaw(t_)
   return (
-    current?.[prop] ??
     t__[__MODEL_PROPS__]?.[prop] ??
     (t__.constructor as any)[__MODEL__]?.[prop] ??
     defaultModelOptions[prop]

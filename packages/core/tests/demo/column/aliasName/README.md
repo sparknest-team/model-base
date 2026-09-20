@@ -37,4 +37,4 @@ permalink: /column/aliasName/
 ## 注意事项
 
 - 需要把后端给的字段名作为 `aliasName` 的属性值，而不是把自定义字段名作为属性值
-- 使用 `aliasName` 当我们数据给后端时也使用自定义的字段名，如果需要在接受后端数据和输出后端数据时字段名保持一致，请参考 [`name`](/column/name/README.md)
+- `aliasName` 只用于兼容输入字段；需要同时控制输入和输出字段名时，请使用 [`name`](/column/name/)。

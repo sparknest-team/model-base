@@ -4,7 +4,7 @@
  * 提供模型与 DTO 之间转换的便捷函数，支持单个模型、数组、Record 等多种数据结构。
  */
 
-import { create } from '../_utils/create'
+import { create, getModelType } from '../_utils/create'
 import { CLEAN_ENUM, type IModelOptions, type TSerializableParam } from '../decorator'
 import { ModelBase } from '../model'
 import { modelToSerializableObj } from './modelToSerializableObj'
@@ -48,7 +48,8 @@ export function deserializeArray<T extends ModelBase>(
 ) {
   if (!dtos) return
   const list: T[] = []
-  dtos.forEach((dto) => list.push(deserialize(itemType, dto, options)))
+  const modelType = getModelType(itemType)
+  dtos.forEach((dto) => list.push(modelType.create(dto, options) as T))
   return list
 }
 

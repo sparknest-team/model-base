@@ -43,4 +43,4 @@ input 流向数据格式化
 ## 注意事项
 
 - `unformatter` 是将数据给后端时进行格式化
-- 如果从后端拿数据时需要进行格式化，请参考 [`formatter`](/column/formatter/README.md)
+- 如果需要转换 DTO 输入值，请参考[反序列化转换](/column/formatter/)。

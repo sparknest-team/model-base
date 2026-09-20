@@ -2,88 +2,67 @@
 permalink: /init/
 ---
 
-# 模型初始化
+# 创建模型实例
 
-## 说明
+模型初始化负责把 DTO 字段映射到类属性、创建嵌套模型、应用默认值，并按需保存变更追踪快照。
 
-ModelBase 提供多种方式创建模型实例，支持自动命名转换和类型安全。
-
-## 创建方式
-
-### 方式一：构造函数
+## 推荐写法
 
 ```ts
-import { Column, ModelBase } from '@model-base/core'
-
 class User extends ModelBase {
   @Column()
   id?: number
 
   @Column()
-  userName?: string
+  displayName?: string
 }
 
-// 支持蛇形命名（后端常用格式）
-const user = new User({
-  id: 1,
-  user_name: 'John'
-})
-
-// 也支持驼峰命名
-const user2 = new User({
-  id: 2,
-  userName: 'Jane'
-})
-```
-
-### 方式二：静态 create 方法（推荐）
-
-```ts
 const user = User.create({
   id: 1,
-  user_name: 'John'
+  display_name: 'Ada',
 })
 ```
 
-::: tip 为什么推荐使用 create？
-`create` 方法可以避免 TypeScript `useDefineForClassFields` 配置对实例化的影响，确保在各种配置下都能正确工作。
-:::
+默认反序列化策略为 `mix`，因此同时接受 `display_name` 和 `displayName`。
 
-### 方式三：工具函数
+## 创建方式
 
-```ts
-import { createModel, deserialize } from '@model-base/core'
-
-// createModel
-const user = createModel(User, { id: 1, user_name: 'John' })
-
-// deserialize（支持惰性加载解决循环依赖）
-const user2 = deserialize(User, { id: 2, user_name: 'Jane' })
-```
+| 写法 | 适用场景 |
+|---|---|
+| `User.create(dto, options?)` | 推荐的统一入口 |
+| `new User(dto, options?)` | 简单场景或已有构造函数调用 |
+| `createModel(User, dto, options?)` | 模型类型由参数传入的通用代码 |
+| `deserialize(User, dto, options?)` | 强调 DTO 反序列化语义的工具函数 |
 
 ## 初始化选项
 
 ```ts
-const user = new User(dto, {
-  // 不设置默认值
+const user = User.create(dto, {
   noDefault: true,
-  
-  // 启用变更追踪
-  enableDataState: true,
-  
-  // 反序列化命名策略
-  deserializeNamingStrategies: 'mix', // 'mix' | 'camelCase' | 'snakeCase'
-  
-  // 序列化命名策略
-  serializeNamingStrategies: 'snakeCase', // 'camelCase' | 'snakeCase'
-  
-  // 分组过滤
-  group: 'create'
+  enableDataState: false,
+  deserializeNamingStrategies: 'mix',
+  serializeNamingStrategies: 'snakeCase',
+  group: 'detail',
 })
 ```
 
-## 注意事项
+| 选项 | 说明 |
+|---|---|
+| `noDefault` | 缺少字段时不应用 `default` 或 `autowired` |
+| `enableDataState` | 是否生成原始快照并启用变更追踪 |
+| `deserializeNamingStrategies` | DTO 输入字段的命名策略 |
+| `serializeNamingStrategies` | 后续序列化使用的命名策略 |
+| `group` | 只初始化未分组字段和指定分组字段 |
+| `excludeGroup` | 排除指定分组；与 `group` 同时存在时后者优先 |
 
-- 属性必须使用 `@Column()` 装饰器标记，否则不会被序列化
-- 默认情况下，反序列化同时支持 `snake_case` 和 `camelCase`
-- 默认情况下，序列化输出为 `snake_case` 格式
+这些选项只影响本次创建的模型树和对应实例，不会修改全局配置或其他实例。
+
+## 可运行示例
+
+```ts :no-line-numbers
+<!-- @include: ./init.spec.ts#model -->
+```
+
+```ts :no-line-numbers
+<!-- @include: ./init.spec.ts#instance -->
+```
