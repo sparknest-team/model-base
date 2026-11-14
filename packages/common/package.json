@@ -1,20 +1,18 @@
 {
   "name": "@model-base/common",
-  "version": "1.0.22",
+  "version": "1.0.23",
   "description": "model-base common",
   "main": "lib/index.js",
   "module": "lib/index.js",
   "types": "lib/index.d.ts",
   "scripts": {
-    "build:lib": "gulp --require @esbuild-kit/cjs-loader -f scripts/build/index.ts",
-    "postinstall": "patch-package"
+    "build:lib": "gulp --require @esbuild-kit/cjs-loader -f scripts/build/index.ts"
   },
   "keywords": [
     ""
   ],
   "author": "",
   "dependencies": {
-    "patch-package": "^6.4.7",
     "tslib": "^2.8.0"
   },
   "engineStrict": true,

@@ -1,21 +1,19 @@
 {
   "name": "@model-base/service",
-  "version": "1.0.22",
+  "version": "1.0.23",
   "description": "loca boot service",
   "main": "lib/index.js",
   "module": "lib/index.js",
   "types": "lib/index.d.ts",
   "scripts": {
-    "build:lib": "gulp --require @esbuild-kit/cjs-loader -f scripts/build/index.ts",
-    "postinstall": "patch-package"
+    "build:lib": "gulp --require @esbuild-kit/cjs-loader -f scripts/build/index.ts"
   },
   "keywords": [
     ""
   ],
   "author": "",
   "dependencies": {
-    "@model-base/core": "^1.0.22",
-    "patch-package": "^6.4.7",
+    "@model-base/core": "^1.0.23",
     "tslib": "^2.8.0"
   },
   "engineStrict": true,
