@@ -1,0 +1,188 @@
+# ModelBase
+
+> ModelBase 是一个 TypeScript 数据模型层工具（npm `@model-base/core`）。用一个类 + `@Column` 装饰器声明字段，
+> 即可获得：反序列化（`snake_case` ↔ `camelCase` 自动映射）、序列化、变更追踪（只提交脏字段）、
+> 空值清理、嵌套模型（`model` / `childType`）、动态模型（运行时列定义）。
+> 典型用途 = 前端表单层：`getSerializableObject()` 提交全量、`getChangedData()` 提交增量。
+> 仓库 https://github.com/loca-spirit/model-base ，文档站 https://modelbase.wiki ，当前版本 1.1.0。
+
+## 文档索引
+
+- [快速上手](https://modelbase.wiki/guide/start/)：安装、tsconfig、定义模型、创建实例、序列化、变更追踪
+- [基本概念](https://modelbase.wiki/guide/know/)：核心术语、数据状态与变更追踪、装饰器概览、API 概览、命名策略
+- [为什么选择它](https://modelbase.wiki/guide/why/)：命名转换、增量提交、空值处理、嵌套结构、数据还原、方案对比
+- [常见问题](https://modelbase.wiki/guide/faq/)：TypeScript 5 / Vite 集成 / `undefined` 问题 / 路径引用 / 指定 model
+- [迁移说明](https://modelbase.wiki/guide/migrate/)、[更新日志](https://modelbase.wiki/guide/changelog/)
+- [llms-full.txt](https://modelbase.wiki/llms-full.txt)：以上全部文档的纯文本合并版（由 `yarn docs:llms` 生成）
+
+## 安装
+
+```bash
+npm install @model-base/core     # 或 yarn add / pnpm add
+```
+
+`@model-base/common`（工具）和 `@model-base/service`（HTTP 服务层）是可选包，`core` 已自带依赖 `common`。
+
+## 必配项（不配就会拿到一堆 `undefined`）
+
+```jsonc
+// tsconfig.json
+{
+  "compilerOptions": {
+    "experimentalDecorators": true,      // 启用装饰器
+    "emitDecoratorMetadata": true,       // 让 @Column 能读到字段类型（number/string/...）
+    "useDefineForClassFields": false,    // 必须 false，否则属性会被覆盖成 undefined
+    "target": "es5"                      // emitDecoratorMetadata 在 es5 下才可靠
+  }
+}
+```
+
+- **Vite 项目要额外处理**：Vite 走 esbuild，而 esbuild 不产出装饰器元数据（与 reflect-metadata 不兼容）。
+  解决 = 用 `@rollup/plugin-typescript` 拦截包含 ModelBase 的文件：
+
+  ```ts
+  import typescript from '@rollup/plugin-typescript'
+  export default defineConfig({
+    plugins: [typescript({ include: ['src/**/*.ts'] })],
+  })
+  ```
+
+- **不要从 barrel 文件（`index.ts`）间接引入嵌套模型**，必须直接引模型文件，否则加载顺序会导致
+  `model` / `childType` 读不到：
+
+  ```ts
+  // ✅ import { DeviceModel } from './Device.model'
+  // ❌ import { DeviceModel } from '@/device'
+  ```
+
+## 最小示例
+
+```ts
+import { Column, DataModel, ModelBase } from '@model-base/core'
+
+@DataModel({ enableDataState: true }) // enableDataState 打开变更追踪
+export class User extends ModelBase {
+  @Column({ primary: true }) id?: number
+  @Column() name?: string            // 类字段 userName 对应后端 user_name
+  @Column({ default: '' }) remark?: string
+  @Column() createdAt?: string
+}
+
+const user = User.create({ user_name: '张三', created_at: '2026-01-01' }) // 推荐写法
+const user2 = new User({ user_name: '张三' })                             // 等价
+
+user.getSerializableObject() // { id: undefined→被清理, name: '张三', created_at: ... }  → 后端 snake_case
+user.name = '李四'
+user.getChangedData()        // 只包含 { name: '李四' }
+```
+
+`Model.create(dto, options?)` 是推荐的实例化入口（`new` 也可以，`create` 会走 `noDefault` 等默认值逻辑）。
+
+## 装饰器
+
+### `@Column(options?)`
+
+| 选项 | 类型 | 说明 |
+|---|---|---|
+| `primary` | `boolean` | 主键，配合 `getPrimaryKey()` / `getPrimaryValue()` |
+| `foreign` | `boolean` | 外键标记 |
+| `name` | `string` | 序列化后的字段名（默认按命名策略生成） |
+| `aliasName` | `string` | 反序列化时的入参别名 |
+| `type` | `any` | 显式指定类型（元数据不可用时） |
+| `model` | `class` | 嵌套单个模型（对象） |
+| `childType` | `class` | 嵌套模型数组的元素类型 |
+| `autowired` | `boolean` | 子模型为空时自动初始化，`Array` → `[]`、`Object`/`model` → 实例、`childType` → 数组 |
+| `default` | `any \| (ctx) => any` | 默认值，可以是函数（入参含 `name` / `property` / `data` / `column`） |
+| `emptyValue` | `any` | 空值填充值（需配合序列化参数 `enableEmptyValue: true` 才生效） |
+| `formatter` / `unformatter` | `function` | 序列化 / 反序列化时的字符串格式化 |
+| `serialize` | `(ctx) => any` | 自定义序列化：`{ value, name, property, serializeData, column }` |
+| `deserialize` | `(ctx) => any` | 自定义反序列化：`{ value, name, property, deserializeData, column }` |
+| `group` / `excludeGroup` | `string \| string[]` | 分组，配合序列化参数的 `group` / `excludeGroup` 做部分提交 |
+| `trim` | `boolean` | 序列化时去首尾空格 |
+| `strictNameCheck` / `strictAliasNameCheck` | `boolean` | 严格校验 `name` / `aliasName` |
+| `extData` | `any` | 任意附加元数据，不参与序列化 |
+
+`serialize` / `deserialize` 是**布尔 0/1 与 boolean 互转**这类需求的标准解法（不要用 formatter，它是给字符串用的）：
+
+```ts
+export const binaryBoolean = {
+  deserialize: ({ value }: { value?: unknown }) => (value == null ? undefined : Boolean(value)),
+  serialize: ({ value }: { value?: unknown }) => (value == null ? undefined : value ? 1 : 0),
+}
+// @Column(binaryBoolean) isActive?: boolean
+```
+
+### `@DataModel(options?)`
+
+| 选项 | 说明 |
+|---|---|
+| `enableDataState` | 打开变更追踪（`getChangedData` / `isChanged` / `saveChangedData` 的前提） |
+| `methods` | 自定义方法集合，可通过 `model.callMethod({ method: 'onInit' })` 调用 |
+| `columnsInValue` | 把列定义放进实例 value（一般不用） |
+| `keepModelName` | 保留模型名信息 |
+
+## 序列化语义（最容易写坏数据的地方）
+
+`getSerializableObject(params?)` 的 `clean` 默认 `CLEAN_UNDEFINED_AND_NULL`：
+
+| `CLEAN_ENUM` | 行为 |
+|---|---|
+| `cleanUndefined` | 只剔除 `undefined` |
+| `cleanUndefinedAndNull`（默认） | 剔除 `undefined` + `null`；**空字符串 / 空数组 / 空对象保留并提交** |
+| `cleanDirty` | 剔除所有空值（含 `''`、`[]`、`{}`）—— 用于「不把空值覆盖到后端」 |
+
+- `getCleanSerializableObject()` = 固定 `cleanDirty` 的快捷方法。
+- `enableEmptyValue: true` 时，值为空的字段会被 `@Column({ emptyValue })` 替换；**`getChangedData()` 内部强制
+  `enableEmptyValue: false`**，所以增量提交不会带 emptyValue 填充。
+- 命名策略：序列化默认 `snakeCase`，反序列化默认 `mix`（两种命名都认）。可在实例 options 或
+  `@DataModel` 上设 `serializeNamingStrategies` / `deserializeNamingStrategies`（值 `snakeCase` / `camelCase`，反序列化可 `mix`）。
+
+## 实例方法
+
+| 方法 | 说明 |
+|---|---|
+| `getSerializableObject(params?)` | 序列化成普通对象（全量） |
+| `getCleanSerializableObject(params?)` | 同上，但清理所有空值 |
+| `getSerializableString()` / `getCleanSerializableString()` | 上述两者的 JSON 字符串版 |
+| `getChangedData(params?)` | 相对上一个保存点的**增量**数据（只含变化字段） |
+| `getChangedDescriptor(params?)` | 增量数据的描述信息 |
+| `isChanged(params?)` | 是否有变更 |
+| `saveChangedData(params?)` | 把当前状态存成新基准点（提交成功后调用） |
+| `revertChangedData()` | 还原到上一个保存点 |
+| `getOriginalData()` | 变更前的原始数据 |
+| `update(dto)` / `setDataByOriginal(dto)` | 增量更新 / 按原始数据设置 |
+| `extend(obj)` / `extendModel(model)` / `mergeModel(model)` | 合并数据或模型 |
+| `isModelEqual(other)` / `isContainsModel(other)` / `equal()` | 相等性比较 |
+| `getColumns()` / `getColumnData(key)` / `setColumnData(key, value)` | 读写列元数据 |
+| `getPrimaryKey()` / `getPrimaryValue()` | 主键配置 / 主键值 |
+| `callMethod({ method })` | 调用 `@DataModel({ methods })` 里定义的方法 |
+
+序列化参数通用项：`group`、`excludeGroup`、`trim`、`camelCase`、`clean`，部分方法支持 `ignoreEmptyString`。
+
+## 静态方法与工具函数
+
+```ts
+Model.create(dto, options?)          // 创建实例（推荐）
+Model.revertChangedData(target)      // 批量还原（支持数组 / 字典）
+Model.resetDefault(target)           // 批量重置为默认值
+Model.isModelBase                    // 标记属性，可用于判断是否 ModelBase 子类
+
+import {
+  serialize,              // 序列化（对单个 / 数组 / 字典）
+  deserialize,            // 反序列化单个
+  deserializeArray,       // 反序列化数组
+  deserializeRecord,      // 反序列化字典
+  deserializeRecordArray, // 反序列化字典套数组
+  createModel,            // createModel(User, dto) —— 支持传 () => User 解决循环依赖
+  createDynamicModel,     // 运行时列定义：createDynamicModel({ name: { type: 'string' } }, dto)
+} from '@model-base/core'
+```
+
+## 常见坑
+
+1. **`useDefineForClassFields` 没关** → 字段全是 `undefined`。
+2. **没开 `emitDecoratorMetadata`** → `@Column` 拿不到类型；Vite 项目必须用 `@rollup/plugin-typescript` 兜。
+3. **嵌套模型从 barrel 引入** → `model` / `childType` 为 `undefined`（加载顺序问题）。
+4. **空字符串被提交** → 默认 `clean` 只剔 `undefined`/`null`，要剔空串用 `getCleanSerializableObject()` 或 `clean: CLEAN_ENUM.CLEAN_DIRTY`。
+5. **Vue 3 `reactive()` 包装过的模型** → 1.1.0 起内部已 `toRaw()`，但把模型塞进 `reactive` 仍不推荐，用 `shallowRef` 或 `toRaw` 取原对象。
+6. **布尔字段后端要 0/1** → 用 `@Column({ serialize, deserialize })` 转换，别在页面里手工转。

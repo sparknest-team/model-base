@@ -1,0 +1,1073 @@
+# ModelBase 完整文档（llms-full.txt）
+
+> 本文件由 `yarn docs:llms` 从 https://modelbase.wiki 的源码文档自动生成，共 6 个页面。
+> 分节索引与速查表见 https://modelbase.wiki/llms.txt 。
+> 包：@model-base/core / @model-base/common / @model-base/service；仓库：https://github.com/loca-spirit/model-base
+
+---
+<!-- source: https://modelbase.wiki/guide/start/ -->
+# 快速上手
+
+## 安装
+
+**npm**
+
+```bash
+npm install @model-base/core
+```
+
+**yarn**
+
+```bash
+yarn add @model-base/core
+```
+
+**pnpm**
+
+```bash
+pnpm add @model-base/core
+```
+
+## 配置 TypeScript
+
+在 `tsconfig.json` 中添加以下配置：
+
+```json
+{
+  "compilerOptions": {
+    "experimentalDecorators": true,
+    "useDefineForClassFields": false
+  }
+}
+```
+
+> tip 提示
+- `experimentalDecorators`: 启用装饰器语法（同时支持新版 TypeScript 5.0+ 装饰器）
+- `useDefineForClassFields`: 必须设置为 `false`，否则会导致属性值为 `undefined`
+
+## 定义模型
+
+使用 `@Column` 装饰器标记需要序列化的属性：
+
+```ts
+import { Column, ModelBase } from '@model-base/core'
+
+export class User extends ModelBase {
+  @Column({ primary: true })
+  id?: number
+
+  @Column()
+  userName?: string
+
+  @Column()
+  email?: string
+}
+```
+
+## 创建实例
+
+支持多种方式创建模型实例：
+
+**构造函数**
+
+```ts
+// 支持蛇形命名（后端常用格式）
+const user = new User({
+  id: 1,
+  user_name: 'John',
+  email: 'john@example.com'
+})
+
+// 也支持驼峰命名
+const user2 = new User({
+  id: 2,
+  userName: 'Jane',
+  email: 'jane@example.com'
+})
+```
+
+**静态方法**
+
+```ts
+// 推荐方式：使用 create 静态方法
+const user = User.create({
+  id: 1,
+  user_name: 'John',
+  email: 'john@example.com'
+})
+```
+
+## 序列化
+
+将模型实例转换为普通对象，用于提交给后端 API：
+
+```ts
+// 获取序列化对象（默认蛇形命名）
+user.getSerializableObject()
+// { id: 1, user_name: 'John', email: 'john@example.com' }
+
+// 获取驼峰命名的对象
+user.getSerializableObject({ camelCase: true })
+// { id: 1, userName: 'John', email: 'john@example.com' }
+
+// 获取清理后的对象（移除空字符串、空数组、空对象）
+user.getCleanSerializableObject()
+```
+
+## 变更追踪
+
+ModelBase 自动追踪数据变化，方便实现增量提交：
+
+```ts
+const user = new User({ id: 1, user_name: 'John' })
+
+// 修改数据
+user.userName = 'Jane'
+user.email = 'jane@example.com'
+
+// 获取变更的数据
+user.getChangedData()
+// { user_name: 'Jane', email: 'jane@example.com' }
+
+// 检查是否有变更
+user.isChanged() // true
+
+// 还原到初始状态
+user.revertChangedData()
+
+// 保存当前状态为新的基准点
+user.saveChangedData()
+```
+
+## 下一步
+
+- [为什么选择 ModelBase](/guide/why/) - 了解 ModelBase 解决的问题
+- [基本概念](/guide/know/) - 深入理解核心概念
+- [@Column 装饰器](/column/default/) - 了解列配置选项
+- [实例方法](/method/getSerializableObject/) - 查看所有可用方法
+
+---
+
+<!-- source: https://modelbase.wiki/guide/know/ -->
+# 基本概念
+
+## 核心术语
+
+### 模型实例 (Model Instance)
+
+继承 `ModelBase` 的类通过 `new` 或 `create()` 创建的实例：
+
+```ts
+class User extends ModelBase {
+  @Column() userName?: string
+}
+
+const user = new User({ user_name: 'John' })  // 模型实例
+const user2 = User.create({ user_name: 'Jane' }) // 推荐方式
+```
+
+### 反序列化 (Deserialize)
+
+将后端返回的 JSON 数据（DTO）转换为模型实例的过程：
+
+```ts
+// 后端返回的 DTO（蛇形命名）
+const dto = { user_name: 'John', created_at: '2024-01-01' }
+
+// 反序列化为模型实例
+const user = new User(dto)
+console.log(user.userName) // 'John' - 驼峰命名
+```
+
+### 序列化 (Serialize)
+
+将模型实例转换为可提交给后端的 JSON 对象：
+
+```ts
+const user = new User({ user_name: 'John' })
+
+// 序列化为 DTO
+user.getSerializableObject() // { user_name: 'John' }
+user.getSerializableObject({ camelCase: true }) // { userName: 'John' }
+```
+
+## 数据状态与变更追踪
+
+ModelBase 内部维护两个数据状态：
+
+| 状态 | 说明 |
+|-----|------|
+| **原始数据 (originalData)** | 创建实例或调用 `saveChangedData()` 时的快照 |
+| **当前数据 (currentData)** | 实例的当前值 |
+
+### 生命周期示意
+
+```
+创建实例 ──────────────────────────────────────────────►
+    │                                                    
+    ├─ originalData = { name: 'John' }                  
+    ├─ currentData  = { name: 'John' }                  
+    │                                                    
+    │  user.name = 'Jane'                               
+    │                                                    
+    ├─ originalData = { name: 'John' }  (不变)          
+    ├─ currentData  = { name: 'Jane' }  (已变更)        
+    │                                                    
+    │  user.getChangedData()                            
+    │  → { name: 'Jane' }                               
+    │                                                    
+    │  user.saveChangedData()                           
+    │                                                    
+    ├─ originalData = { name: 'Jane' }  (更新为当前值)  
+    ├─ currentData  = { name: 'Jane' }                  
+    │                                                    
+    │  user.revertChangedData()                         
+    │                                                    
+    └─ currentData 还原为 originalData                  
+```
+
+## 装饰器概览
+
+### @Column
+
+属性装饰器，标记需要序列化的属性：
+
+```ts
+class User extends ModelBase {
+  // 基本用法
+  @Column()
+  userName?: string
+
+  // 主键
+  @Column({ primary: true })
+  id?: number
+
+  // 指定别名（兼容不同 API 格式）
+  @Column({ aliasName: 'nick_name' })
+  nickname?: string
+
+  // 默认值
+  @Column({ default: 0 })
+  age?: number
+
+  // 嵌套模型
+  @Column({ model: Address })
+  address?: Address
+
+  // 数组模型
+  @Column({ model: OrderItem, default: () => [] })
+  orders?: OrderItem[]
+
+  // 自定义序列化/反序列化
+  @Column({
+    deserialize: ({ value }) => new Date(value),
+    serialize: ({ value }) => value?.toISOString()
+  })
+  createdAt?: Date
+}
+```
+
+### @DataModel
+
+类装饰器，配置模型级别的选项：
+
+```ts
+@DataModel({
+  enableDataState: true,  // 启用变更追踪
+  methods: {
+    onInit: ({ data }) => console.log('Initialized:', data)
+  }
+})
+class User extends ModelBase {
+  // ...
+}
+```
+
+## API 概览
+
+### 实例方法
+
+| 方法 | 说明 |
+|-----|------|
+| `getSerializableObject(options?)` | 获取序列化对象 |
+| `getCleanSerializableObject(options?)` | 获取清理后的序列化对象（移除空值） |
+| `getChangedData(options?)` | 获取变更的数据 |
+| `isChanged(options?)` | 检查是否有变更 |
+| `saveChangedData(options?)` | 保存当前状态为新的基准点 |
+| `revertChangedData()` | 还原到上一个保存点 |
+| `update(dto)` | 增量更新数据 |
+| `getOriginalData()` | 获取原始数据 |
+| `getPrimaryKey()` | 获取主键配置 |
+| `getPrimaryValue()` | 获取主键值 |
+
+### 静态方法
+
+| 方法 | 说明 |
+|-----|------|
+| `Model.create(dto, options?)` | 创建模型实例（推荐） |
+| `Model.revertChangedData(target)` | 还原目标对象的数据 |
+| `Model.resetDefault(target)` | 重置为默认值 |
+
+### 工具函数
+
+```ts
+import { 
+  deserialize,      // 反序列化单个对象
+  deserializeArray, // 反序列化数组
+  serialize,        // 序列化
+  createModel,      // 创建模型实例
+  createDynamicModel // 创建动态模型
+} from '@model-base/core'
+```
+
+## 命名策略
+
+| 策略 | 说明 |
+|-----|------|
+| `snakeCase` | 蛇形命名：`user_name`（默认序列化策略） |
+| `camelCase` | 驼峰命名：`userName` |
+| `mix` | 混合模式：反序列化时同时支持两种格式（默认反序列化策略） |
+
+配置示例：
+
+```ts
+// 实例级别
+const user = new User(dto, {
+  serializeNamingStrategies: 'camelCase',
+  deserializeNamingStrategies: 'snakeCase'
+})
+
+// 类级别
+@DataModel({
+  serializeNamingStrategies: 'camelCase'
+})
+class User extends ModelBase { }
+```
+
+---
+
+<!-- source: https://modelbase.wiki/guide/why/ -->
+# 为什么选择 ModelBase
+
+## 简介
+
+**ModelBase** 是一个轻量级的 TypeScript 数据模型库，专为前后端数据交互而设计。它通过装饰器语法提供优雅的数据序列化、反序列化和变更追踪能力。
+
+## 核心特性
+
+| 特性 | 说明 |
+|-----|------|
+| 🔄 **自动命名转换** | 自动处理 `snake_case` ↔ `camelCase` 转换 |
+| 📝 **类型安全** | 完整的 TypeScript 支持，享受 IDE 智能提示 |
+| 🔍 **变更追踪** | 自动追踪数据变化，支持增量提交和数据还原 |
+| 🎯 **装饰器语法** | 使用 `@Column` 声明式定义模型属性 |
+| 🏗️ **嵌套模型** | 支持复杂的嵌套对象和数组结构 |
+| ⚡ **Vue 兼容** | 完美支持 Vue 2/3 响应式系统 |
+
+## 解决的痛点
+
+### 1. 命名风格转换
+
+后端 API 通常返回 `snake_case` 格式，前端习惯使用 `camelCase`：
+
+```ts
+// 后端返回
+{ user_name: 'John', created_at: '2024-01-01' }
+
+// 前端期望
+{ userName: 'John', createdAt: '2024-01-01' }
+```
+
+**ModelBase 方案：** 自动双向转换，无需手动处理
+
+```ts
+class User extends ModelBase {
+  @Column() userName?: string
+  @Column() createdAt?: string
+}
+
+const user = new User({ user_name: 'John', created_at: '2024-01-01' })
+console.log(user.userName) // 'John' ✅
+user.getSerializableObject() // { user_name: 'John', created_at: '...' } ✅
+```
+
+### 2. 增量数据提交
+
+表单编辑时，只需提交变更的字段：
+
+```ts
+const user = new User({ id: 1, user_name: 'John', email: 'john@test.com' })
+
+// 用户只修改了邮箱
+user.email = 'new@test.com'
+
+// 只获取变更的数据
+user.getChangedData() // { email: 'new@test.com' }
+```
+
+### 3. 空值处理
+
+提交时自动过滤 `undefined`、`null`、空字符串等：
+
+```ts
+user.getCleanSerializableObject()
+// 自动移除空值、空数组、空对象
+```
+
+### 4. 复杂嵌套结构
+
+处理包含子对象、数组的复杂数据：
+
+```ts
+class Order extends ModelBase {
+  @Column({ primary: true })
+  id?: number
+
+  @Column({ model: OrderItem })
+  items?: OrderItem[]
+
+  @Column({ model: Address })
+  address?: Address
+}
+
+// 自动递归创建嵌套模型实例
+const order = new Order(apiResponse)
+order.items[0].productName // 类型安全 ✅
+```
+
+### 5. 数据还原
+
+撤销用户的修改，恢复到初始状态：
+
+```ts
+const user = new User({ user_name: 'John' })
+user.userName = 'Modified'
+
+// 还原到初始状态
+user.revertChangedData()
+console.log(user.userName) // 'John'
+```
+
+## 适用场景
+
+- 📋 **表单处理**：编辑、提交、撤销、变更检测
+- 🔗 **API 交互**：请求/响应数据转换
+- 📊 **数据管理**：复杂业务对象的状态管理
+- 🎨 **前端应用**：Vue、React 等框架的数据层
+
+## 与其他方案对比
+
+| 特性 | ModelBase | 手动处理 | class-transformer |
+|-----|-----------|---------|-------------------|
+| 命名转换 | ✅ 自动 | ❌ 手动 | ✅ 需配置 |
+| 变更追踪 | ✅ 内置 | ❌ 无 | ❌ 无 |
+| 数据还原 | ✅ 内置 | ❌ 无 | ❌ 无 |
+| Vue 兼容 | ✅ 完美 | ✅ 取决于实现 | ⚠️ 需额外处理 |
+| 学习成本 | 低 | 低 | 中 |
+
+---
+
+<!-- source: https://modelbase.wiki/guide/faq/ -->
+## 常见问题
+### typescript5的问题
+> info typescript5的问题
+
+项目的输出目标必须是es5才可以正确的启用emitDecoratorMetadata
+
+### vite集成modelbase
+
+> info vite集成modelbase
+
+因为 vite 是强依赖 esbuild 的，而 esbuild 的最大特性就是速度快，所以也不愿意支持完整的 typescript type checker。
+导致 vite 不能和 reflect-metadata 一起使用，比较有名的框架包括 typeorm，nestjs 等都不能很好的结合。
+
+方案1：[vite支持decorator](https://www.bilibili.com/opus/532019046365278571)
+
+方案2：
+```ts
+import typescript from '@rollup/plugin-typescript'
+
+export default defineConfig({
+  plugins: [
+    // 所有应用到ModelBase的文件都需要被拦截，路径加入到include当中。
+    typescript({
+        include: ['src/**/*.ts']
+      })
+  ],
+})
+
+```
+## undefined问题
+### 启用meta配置
+
+> info 启用配置
+
+因为modelbase利用reflect-metadata，所以我们需要在tsconfig.json里面启用如下配置：
+```ts
+"compilerOptions": {
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+}
+```
+### 路径引用
+
+另外引用modelbase的childType（model）的时候，必须进行直接引用，否则会因为加载顺序问题导致childType（model）无法被读取到。
+
+> tip 正确的引用方式
+
+```ts
+import { DeviceModel } from '@/device/Device.model'
+// 或
+import { DeviceModel } from './Device.model'
+
+class xx {
+  @Column({ childType: DeviceModel, autowired: true })
+  @Column({ model: DeviceModel, autowired: true })
+}
+```
+::: caution 错误的方式
+
+```ts
+import { DeviceModel } from '@/device'
+
+class xx {
+  @Column({ childType: DeviceModel, autowired: true })
+  @Column({ model: DeviceModel, autowired: true })
+}
+```
+### 指定model
+
+> tip 正确写法（推荐）
+
+`Consumer`需要在`ConsumerList`前面，同时指定了model（childType）。
+```ts
+class Consumer extends ModelBase {
+  @Column()
+  public userName: string
+}
+
+class ConsumerList extends ModelBase {
+  @Column({ model: () => Consumer})
+  public child: Consumer
+}
+```
+> warning 正常使用
+
+`Consumer`需要在`ConsumerList`后面了（错误，可以通过eslint去纠正），同时指定了model（childType）。
+```ts
+class ConsumerList extends ModelBase {
+  @Column({ model: Consumer})
+  public child: Consumer
+}
+
+class Consumer extends ModelBase {
+  @Column()
+  public userName: string
+}
+```
+> warning 正常使用
+
+`Consumer`在`ConsumerList`前面了，但是没有指定了model（错误）。
+```ts
+class Consumer extends ModelBase {
+  @Column()
+  public userName: string
+}
+
+class ConsumerList extends ModelBase {
+  @Column()
+  public child: Consumer
+}
+```
+::: caution 错误使用
+
+class定义顺序不对，也没有指定model（别名childType），无法正确new出对象。
+```ts
+class ConsumerList extends ModelBase {
+  @Column()
+  public child: Consumer
+}
+
+class Consumer extends ModelBase {
+  @Column()
+  public userName: string
+}
+```
+### 关闭define配置
+#### 关闭`useDefineForClassFields`
+> info 在tsconfig.json关闭配置
+
+```json
+"compilerOptions": {
+    "useDefineForClassFields": false,
+}
+```
+#### 问题分析
+升级typescript后，`useDefineForClassFields`默认是`true`。
+
+```json
+"compilerOptions": {
+    "useDefineForClassFields": true,
+}
+```
+如果启用 `useDefineForClassFields`，会使用 `Object.defineProperty` 来初始化声明，对于class的继承会出现值undefined的问题。
+下面的例子中
+> note 代码示例
+通过`new Consumer(dto)`进行实例化。
+```ts
+class ModelBase {
+  constructor(dto： any) {
+    this.userName = dto?.userName;
+  }
+}
+
+class Consumer extends ModelBase {
+  public userName: string
+}
+```
+> info 编译结果
+启用`useDefineForClassFields`后的编译结果。
+
+```ts
+"use strict";
+class ModelBase {
+    constructor(dto, any) {
+        this.userName = dto === null || dto === void 0 ? void 0 : dto.userName;
+    }
+}
+class Consumer extends ModelBase {
+    constructor() {
+        // ModelBase的会在Consumer的`super(...arguments)`函数进行初始化复制
+        super(...arguments);
+        // 将userName初始化为'undefined'
+        Object.defineProperty(this, "userName", {
+            enumerable: true,
+            configurable: true,
+            writable: true,
+            value: void 0
+        });
+    }
+}
+```
+
+---
+
+<!-- source: https://modelbase.wiki/guide/migrate/ -->
+## 更新日志
+
+[//]: # 'template'
+[//]: # '## 1.1.2'
+[//]: # '#### Feature'
+[//]: # '#### Fix'
+[//]: # '#### Style'
+[//]: # '#### Breaking Change'
+[//]: # '#### Remove'
+
+## 1.0.1
+
+## @model-base/core
+
+### change
+
+#### remove `emptyValueScope` 和 `emptyValue`
+
+#### change `revertChangedDataObject` 还原 class 的时候创建新对象不会设置默认值。
+
+#### 新装饰器的自动适配`experimentalDecorators`，大家用起来是无感的。
+
+```ts
+// 新版装饰器
+{
+    "experimentalDecorators": false,
+}
+// 旧版装饰器
+{
+    "experimentalDecorators": true,
+}
+```
+
+#### 对`emitDecoratorMetadata`不再进行依赖
+
+- 变更 1：`ModelBase`的`class`都需要传入`model`。
+- 变更 2：`Column`装饰器的`autowired`不再支持数组，仅支持属性是`ModelBase`类型的自动初始化。
+
+```ts
+class UserList extends ModelBase {
+  @Column({
+    model: () => UserModel,
+    default: () => [],
+  })
+  list!: UserModel[]
+
+  @Column({
+    model: () => UserModel,
+    default: () => new UserModel(),
+  })
+  userA!: UserModel
+
+  @Column({
+    model: () => UserModel,
+    autowired: true,
+  })
+  userB!: UserModel
+}
+```
+
+#### change and feature `Column`装饰器增加`deserialize` 和 `serialize`
+
+- 对应的是旧版本的 `formatter`和`unformatter`
+- 参数全部调整，新的类型为 `IColumnSerialize`和`IColumnDeserialize`
+
+```ts
+export type IColumnSerialize = {
+  value?: any
+  name: string // 调整，对应旧版本的是key
+  property: string // 新增，属性名
+  deserializeData: T // 调整，对应之前的data，当前class的实例化数据。只读模式
+  column: IColumnInner
+}
+export type IColumnDeserialize = {
+  value?: any
+  name: string // 调整，对应旧版本的是key
+  property: string // 新增，属性名
+  serializeData: any// 调整，对应之前的data，服务器的序列化数据。。只读模式
+  column: IColumnInner
+}
+```
+
+#### change and feature `name` 和 `aliseName` 支持传入 `camelCase` 风格的名字
+
+- 增加 `strictNameCheck` 和 `strictAliasNameCheck`，设置为 true 后，序列化后强制使用`name` ，初始化强制使用 `aliseName`的名字，和旧的逻辑一致。
+- `name` 和 `aliseName` 支持传入 `camelCase` 风格的名字了。支持序列化函数和反序列化函数(new)通过参数`camelCase`指定输入和输出。
+- `name` 对应服务端的返回数据属性字段，如果服务端是下划线，则填入下划线数据，如果服务端是驼峰的，本次调整后，会根据默认的命名策略来适配，默认是`mix`模式，同时支持`camelCase` 和 `snakeCase`
+
+- 变更前
+
+```ts
+class UserModel extends ModelBase {
+  @Column({ name: 'testUserA' })
+  testUserA!: number
+  @Column({ name: 'test_user_b' })
+  testUserA!: number
+  @Column({ name: 'total_result' })
+  total!: string
+}
+const user = new UserModel({ testUserA: 'usera', test_user_b: 'userb' })
+user.getSerializableObject()
+// { testUserA: 'usera', test_user_b: 'userb' }
+user.getSerializableObject({ camelCase: true })
+// { testUserA: 'usera', test_user_b: 'userb' }
+```
+
+- 变更后
+
+```ts
+class UserModel extends ModelBase {
+  @Column({ name: 'testUserA' })
+  testUserA!: number
+  @Column({ name: 'testUserB' }) // 支持驼峰了
+  testUserA!: number
+  @Column({ name: 'totalResult' }) // 支持驼峰了
+  total!: string
+}
+const user = new UserModel({ testUserA: 'usera', test_user_b: 'userb' })
+user.getSerializableObject()
+// { test_user_a: 'usera', test_user_b: 'userb' }
+user.getSerializableObject({ camelCase: true })
+// { testUserA: 'usera', testUserB: 'userb' }
+```
+
+```ts
+class UserModel extends ModelBase {
+  @Column({ name: 'testUserA', strictNameCheck: true }) // strictAliasNameCheck也是同样的道理。
+  testUserA!: number
+  @Column({ name: 'test_user_b', strictNameCheck: true })
+  testUserA!: number
+  @Column({ name: 'total_result', strictNameCheck: true })
+  total!: string
+}
+const user = new UserModel({ testUserA: 'usera', test_user_b: 'userb' })
+user.getSerializableObject()
+// { testUserA: 'usera', test_user_b: 'userb' }
+user.getSerializableObject({ camelCase: true })
+// { testUserA: 'usera', test_user_b: 'userb' }
+```
+
+### Feature
+
+##### 标准化 `IModelProps`，以下作用域范围由大到小。
+
+- class: 通过`@DataModel`类装饰器传入，作用域在整个`class`上生效。
+
+- instance: 支持`new`时候传入`IModelProps`，作用域在当前实例上生效。
+
+- init: 在`new`的时候传入`IModelProps.current`属性，作用域在初始化阶段生效。
+
+```ts
+interface IModelProps {
+  noDefault?: boolean // 初始化不设置默认值
+  enableDataState?: boolean // 是否启用数据状态
+  keepModelName?: boolean // 是否采用dto数据中的模型的key
+  columnsInValue?: boolean // 是否根据模型实例中的值来初始化模型的列
+  deserializeNamingStrategies?: 'mix' | 'camelCase' | 'snakeCase'
+  serializeNamingStrategies?: 'camelCase' | 'snakeCase'
+}
+```
+
+##### 标准化 `model`和 `default`的传入，推荐函数式传入。
+
+    model的函数式传入可以避免循环依赖
+
+    default的函数式传入可以避免
+
+```ts
+class UserList extends ModelBase {
+  @Column({
+    model: () => UserModel,
+    default: () => [],
+  })
+  list!: UserModel[]
+}
+```
+
+##### 内部标准化实例化统一用 `Class.create()`，避免 typescript 的`useDefineForClassFields`不同配置对实例化的效果造成影响。
+
+##### 新旧装饰器都不允许通过`ClassField`进行`define`。请使用`default`
+
+```ts
+// 不支持
+class UserModel extends ModelBase {
+  @Column()
+  id!: number = 1 // 不支持
+  @Column()
+  name!: string = 'user1' // 不支持
+  @Column()
+  list!: string = [] // 不支持
+}
+// 支持
+class UserModel extends ModelBase {
+  @Column({ default: 1 })
+  id!: number
+  @Column({ default: 'user1' })
+  name!: string
+  @Column({ default: () => [] }) // 引用类型请使用函数。
+  list!: string
+}
+```
+
+##### 支持`lodash`对`ModelBase`实例进行克隆
+
+---
+
+<!-- source: https://modelbase.wiki/guide/changelog/ -->
+## 更新日志
+
+[//]: # 'template'
+[//]: # '## 1.1.2'
+[//]: # '#### Feature'
+[//]: # '#### Fix'
+[//]: # '#### Style'
+[//]: # '#### Breaking Change'
+[//]: # '#### Remove'
+
+## 1.0.12
+
+## @model-base/core
+#### fix 增加副作用判断，支持按需加载。
+
+## 1.0.1
+
+## @model-base/core
+
+### change
+
+#### remove `emptyValueScope` 和 `emptyValue`
+
+#### change `revertChangedDataObject` 还原 class 的时候创建新对象不会设置默认值。
+
+#### 新装饰器的自动适配`experimentalDecorators`，大家用起来是无感的。
+
+```ts
+// 新版装饰器
+{
+    "experimentalDecorators": false,
+}
+// 旧版装饰器
+{
+    "experimentalDecorators": true,
+}
+```
+
+#### 对`emitDecoratorMetadata`不再进行依赖
+
+- 变更 1：`ModelBase`的`class`都需要传入`model`。
+- 变更 2：`Column`装饰器的`autowired`不再支持数组，仅支持属性是`ModelBase`类型的自动初始化。
+
+```ts
+class UserList extends ModelBase {
+  @Column({
+    model: () => UserModel,
+    default: () => [],
+  })
+  list!: UserModel[]
+
+  @Column({
+    model: () => UserModel,
+    default: () => new UserModel(),
+  })
+  userA!: UserModel
+
+  @Column({
+    model: () => UserModel,
+    autowired: true,
+  })
+  userB!: UserModel
+}
+```
+
+#### change and feature `Column`装饰器增加`deserialize` 和 `serialize`
+
+- 对应的是旧版本的 `formatter`和`unformatter`
+- 参数全部调整，新的类型为 `IColumnSerialize`和`IColumnDeserialize`
+
+```ts
+export type IColumnSerialize = {
+  value?: any
+  name: string // 调整，对应旧版本的是key
+  property: string // 新增，属性名
+  deserializeData: T // 调整，对应之前的data，当前class的实例化数据。只读模式
+  column: IColumnInner
+}
+export type IColumnDeserialize = {
+  value?: any
+  name: string // 调整，对应旧版本的是key
+  property: string // 新增，属性名
+  serializeData: any// 调整，对应之前的data，服务器的序列化数据。。只读模式
+  column: IColumnInner
+}
+```
+
+#### break change `getColumns` 
+- `column` 变更为 `name` 
+
+#### change and feature `name` 和 `aliseName` 支持传入 `camelCase` 风格的名字
+
+- 增加 `strictNameCheck` 和 `strictAliasNameCheck`，设置为 true 后，序列化后强制使用`name` ，初始化强制使用 `aliseName`的名字，和旧的逻辑一致。
+- `name` 和 `aliseName` 支持传入 `camelCase` 风格的名字了。支持序列化函数和反序列化函数(new)通过参数`camelCase`指定输入和输出。
+- `name` 对应服务端的返回数据属性字段，如果服务端是下划线，则填入下划线数据，如果服务端是驼峰的，本次调整后，会根据默认的命名策略来适配，默认是`mix`模式，同时支持`camelCase` 和 `snakeCase`
+
+- 变更前
+
+```ts
+class UserModel extends ModelBase {
+  @Column({ name: 'testUserA' })
+  testUserA!: number
+  @Column({ name: 'test_user_b' })
+  testUserA!: number
+  @Column({ name: 'total_result' })
+  total!: string
+}
+const user = new UserModel({ testUserA: 'usera', test_user_b: 'userb' })
+user.getSerializableObject()
+// { testUserA: 'usera', test_user_b: 'userb' }
+user.getSerializableObject({ camelCase: true })
+// { testUserA: 'usera', test_user_b: 'userb' }
+```
+
+- 变更后
+
+```ts
+class UserModel extends ModelBase {
+  @Column({ name: 'testUserA' })
+  testUserA!: number
+  @Column({ name: 'testUserB' }) // 支持驼峰了
+  testUserA!: number
+  @Column({ name: 'totalResult' }) // 支持驼峰了
+  total!: string
+}
+const user = new UserModel({ testUserA: 'usera', test_user_b: 'userb' })
+user.getSerializableObject()
+// { test_user_a: 'usera', test_user_b: 'userb' }
+user.getSerializableObject({ camelCase: true })
+// { testUserA: 'usera', testUserB: 'userb' }
+```
+
+```ts
+class UserModel extends ModelBase {
+  @Column({ name: 'testUserA', strictNameCheck: true }) // strictAliasNameCheck也是同样的道理。
+  testUserA!: number
+  @Column({ name: 'test_user_b', strictNameCheck: true })
+  testUserA!: number
+  @Column({ name: 'total_result', strictNameCheck: true })
+  total!: string
+}
+const user = new UserModel({ testUserA: 'usera', test_user_b: 'userb' })
+user.getSerializableObject()
+// { testUserA: 'usera', test_user_b: 'userb' }
+user.getSerializableObject({ camelCase: true })
+// { testUserA: 'usera', test_user_b: 'userb' }
+```
+
+### Feature
+
+##### 标准化 `IModelProps`，以下作用域范围由大到小。
+
+- class: 通过`@DataModel`类装饰器传入，作用域在整个`class`上生效。
+
+- instance: 支持`new`时候传入`IModelProps`，作用域在当前实例上生效。
+
+- init: 在`new`的时候传入`IModelProps.current`属性，作用域在初始化阶段生效。
+
+```ts
+interface IModelProps {
+  noDefault?: boolean // 初始化不设置默认值
+  enableDataState?: boolean // 是否启用数据状态
+  keepModelName?: boolean // 是否采用dto数据中的模型的key
+  columnsInValue?: boolean // 是否根据模型实例中的值来初始化模型的列
+  deserializeNamingStrategies?: 'mix' | 'camelCase' | 'snakeCase'
+  serializeNamingStrategies?: 'camelCase' | 'snakeCase'
+}
+```
+
+##### 标准化 `model`和 `default`的传入，推荐函数式传入。
+
+    model的函数式传入可以避免循环依赖
+
+    default的函数式传入可以避免
+
+```ts
+class UserList extends ModelBase {
+  @Column({
+    model: () => UserModel,
+    default: () => [],
+  })
+  list!: UserModel[]
+}
+```
+
+##### 内部标准化实例化统一用 `Class.create()`，避免 typescript 的`useDefineForClassFields`不同配置对实例化的效果造成影响。
+
+##### 新旧装饰器都不允许通过`ClassField`进行`define`。请使用`default`
+
+```ts
+// 不支持
+class UserModel extends ModelBase {
+  @Column()
+  id!: number = 1 // 不支持
+  @Column()
+  name!: string = 'user1' // 不支持
+  @Column()
+  list!: string = [] // 不支持
+}
+// 支持
+class UserModel extends ModelBase {
+  @Column({ default: 1 })
+  id!: number
+  @Column({ default: 'user1' })
+  name!: string
+  @Column({ default: () => [] }) // 引用类型请使用函数。
+  list!: string
+}
+```
+
+##### 支持`lodash`对`ModelBase`实例进行克隆

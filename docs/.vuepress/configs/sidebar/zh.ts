@@ -30,6 +30,10 @@ export const zhSideBar: SidebarOptions = {
           text: '迁移说明',
           link: '/guide/migrate/',
         },
+        {
+          text: 'LLM 文档',
+          link: '/guide/llm/',
+        },
       ],
     },
     // {
