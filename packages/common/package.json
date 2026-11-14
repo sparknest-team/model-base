@@ -1,6 +1,6 @@
 {
   "name": "@model-base/common",
-  "version": "1.0.23",
+  "version": "1.1.0",
   "description": "model-base common",
   "main": "lib/index.js",
   "module": "lib/index.js",
@@ -24,6 +24,5 @@
   ],
   "publishConfig": {
     "access": "public"
-  },
-  "gitHead": "b34455a7fcbf89bc8f28be3956ded76bca9b4acd"
+  }
 }
