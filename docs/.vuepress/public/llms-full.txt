@@ -175,6 +175,20 @@ ModelBase 将接口数据转换为有明确字段规则的模型，并提供序�
 <!-- source: https://modelbase.wiki/guide/changelog/ -->
 ## 更新日志
 
+## 1.2.0（相对 1.1.0）
+
+三个公开包统一使用 1.2.0。使用 `^1.1.0` 的项目在重新解析依赖时可能自动升级。下面列出了会影响业务代码的变化，具体调整步骤见[迁移指南](/guide/migrate/#upgrade-1-2)。
+
+| 范围 | 可能观察到的变化 |
+| --- | --- |
+| 快照与编辑 | 新增 `enableSnapshot`。关闭它或旧别名 `enableDataState` 会同时关闭保存、变更查询和还原。 |
+| 模型与集合 | 启用追踪的实例使用 Proxy。标准模型树延迟建立快照，未显式建模的复杂值不保证追踪内部修改。 |
+| TypeScript 调用 | 移除 `IModelUpdateOptions`、`IModelOptions.current` 和部分方法参数。 |
+| 字段与 Vue | 修复继承列缓存、稀疏数组的变更描述及响应式写回；序列化支持使用 `excludeGroup` 排除多个组。 |
+| service | 成功请求正确传入 wrapper，原先返回普通对象的代码可能收到模型或模型集合。 |
+
+文档新增按任务组织的指南、API 速查及可执行示例。以下日期记录保留开发过程。
+
 ## AI 升级校验记录（2026-10-12）
 
 - 提供单文件[升级记录与项目校验任务](/modelbase-upgrade-audit.txt)，区分实际行为变化与保留的既有语义，供 AI 检查业务项目。
@@ -188,9 +202,9 @@ ModelBase 将接口数据转换为有明确字段规则的模型，并提供序�
 - 新增 `yarn check:docs`，检查文档路由、导航链接和源代码片段引用。
 - 调整导航、上一页/下一页和表格排版。本轮未修改 core 或 service 的运行时代码。
 
-## 未发布（整理于 2026-09-22）
+## 开发记录（2026-09-22）
 
-本节汇总当前工作区中 ModelBase 与 service 的改动，尚未发布到 npm，也未调整包版本号。
+本节记录准备 1.2.0 期间的实现细节。
 
 ### ModelBase（@model-base/core）
 
@@ -1562,6 +1576,21 @@ API 要求保留 null 时显式选择 `CLEAN_UNDEFINED`。0 和 false 不应被�
 功能是否已发布，以实际安装版本和[更新日志](/guide/changelog/)为准。
 
 让 AI 检查已有业务项目时，可提供[本轮升级校验记录](/modelbase-upgrade-audit.txt)。它包含行为变化、搜索命令和验证矩阵，应结合项目实际安装版本执行。
+
+<a id="upgrade-1-2"></a>
+
+## 从 1.1.0 升级到 1.2.0
+
+在升级分支中对齐项目使用的 ModelBase 包版本，保留旧锁文件以便回退。用同一份业务 DTO 对照升级前后的输出、编辑回滚和成功响应。
+
+| 搜索项目中的用法 | 调整与验证 |
+| --- | --- |
+| `enableDataState: false` 配合 `isChanged()`、保存或回滚 | 需要取消编辑或增量提交的实例使用 `Model.create(dto, { enableSnapshot: true })`。编辑一个字段，确认能取到差异并回滚；只做 DTO 映射可继续关闭快照。 |
+| 修改 `model.extra.foo`、普通数组原地更新、持有输入 DTO 引用 | 为需要追踪的对象或集合声明 `model` 或 `childType`，通过模型引用编辑。不透明值由业务保存基准。分别测试修改、查询和还原。 |
+| `IModelUpdateOptions`、`options.current` | 创建配置改用 `IModelOptions`，将当前实例的命名策略、快照配置等移到创建选项顶层。父子模型分别验证命名与追踪，尤其要检查父实例关闭快照时创建的子模型。 |
+| `callMethod({ method, camelCase })`、`extendModel(other, options)` | 改为 `callMethod({ method })` 和 `extendModel(other)`。需要指定输出命名时在序列化步骤设置 `camelCase`，再运行项目的类型检查。 |
+| 自定义响应工厂、依赖普通响应对象 | 工厂接收 `Response.create(dto, wrapper)`，直接构造仍使用 `new ServiceResponse(dto, options, wrapper)`。用成功响应核对模型类型、嵌套字段及输出 DTO。 |
+| Vue watcher、运行时追加列或子类覆盖列 | 回填、回滚可能触发此前漏掉的监听；验证一次操作只触发预期次数的请求。父类追加列后检查子类输出，使用 `ColumnDefine` 注册字段。 |
 
 ## 1. 先固定项目现有行为
 

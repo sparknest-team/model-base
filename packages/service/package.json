@@ -1,6 +1,6 @@
 {
   "name": "@model-base/service",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "loca boot service",
   "main": "lib/index.js",
   "module": "lib/index.js",
@@ -13,7 +13,7 @@
   ],
   "author": "",
   "dependencies": {
-    "@model-base/core": "^1.1.0",
+    "@model-base/core": "^1.2.0",
     "tslib": "^2.8.0"
   },
   "engineStrict": true,

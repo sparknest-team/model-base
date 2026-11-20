@@ -9,6 +9,21 @@ permalink: /guide/migrate/
 
 让 AI 检查已有业务项目时，可提供[本轮升级校验记录](/modelbase-upgrade-audit.txt)。它包含行为变化、搜索命令和验证矩阵，应结合项目实际安装版本执行。
 
+<a id="upgrade-1-2"></a>
+
+## 从 1.1.0 升级到 1.2.0
+
+在升级分支中对齐项目使用的 ModelBase 包版本，保留旧锁文件以便回退。用同一份业务 DTO 对照升级前后的输出、编辑回滚和成功响应。
+
+| 搜索项目中的用法 | 调整与验证 |
+| --- | --- |
+| `enableDataState: false` 配合 `isChanged()`、保存或回滚 | 需要取消编辑或增量提交的实例使用 `Model.create(dto, { enableSnapshot: true })`。编辑一个字段，确认能取到差异并回滚；只做 DTO 映射可继续关闭快照。 |
+| 修改 `model.extra.foo`、普通数组原地更新、持有输入 DTO 引用 | 为需要追踪的对象或集合声明 `model` 或 `childType`，通过模型引用编辑。不透明值由业务保存基准。分别测试修改、查询和还原。 |
+| `IModelUpdateOptions`、`options.current` | 创建配置改用 `IModelOptions`，将当前实例的命名策略、快照配置等移到创建选项顶层。父子模型分别验证命名与追踪，尤其要检查父实例关闭快照时创建的子模型。 |
+| `callMethod({ method, camelCase })`、`extendModel(other, options)` | 改为 `callMethod({ method })` 和 `extendModel(other)`。需要指定输出命名时在序列化步骤设置 `camelCase`，再运行项目的类型检查。 |
+| 自定义响应工厂、依赖普通响应对象 | 工厂接收 `Response.create(dto, wrapper)`，直接构造仍使用 `new ServiceResponse(dto, options, wrapper)`。用成功响应核对模型类型、嵌套字段及输出 DTO。 |
+| Vue watcher、运行时追加列或子类覆盖列 | 回填、回滚可能触发此前漏掉的监听；验证一次操作只触发预期次数的请求。父类追加列后检查子类输出，使用 `ColumnDefine` 注册字段。 |
+
 ## 1. 先固定项目现有行为
 
 记录典型 DTO 的输入、输出、空值、分组、默认值及回滚结果。升级后对照测试，不只比较方法名。

@@ -4,6 +4,20 @@ permalink: /guide/changelog/
 
 ## 更新日志
 
+## 1.2.0（相对 1.1.0）
+
+三个公开包统一使用 1.2.0。使用 `^1.1.0` 的项目在重新解析依赖时可能自动升级。下面列出了会影响业务代码的变化，具体调整步骤见[迁移指南](/guide/migrate/#upgrade-1-2)。
+
+| 范围 | 可能观察到的变化 |
+| --- | --- |
+| 快照与编辑 | 新增 `enableSnapshot`。关闭它或旧别名 `enableDataState` 会同时关闭保存、变更查询和还原。 |
+| 模型与集合 | 启用追踪的实例使用 Proxy。标准模型树延迟建立快照，未显式建模的复杂值不保证追踪内部修改。 |
+| TypeScript 调用 | 移除 `IModelUpdateOptions`、`IModelOptions.current` 和部分方法参数。 |
+| 字段与 Vue | 修复继承列缓存、稀疏数组的变更描述及响应式写回；序列化支持使用 `excludeGroup` 排除多个组。 |
+| service | 成功请求正确传入 wrapper，原先返回普通对象的代码可能收到模型或模型集合。 |
+
+文档新增按任务组织的指南、API 速查及可执行示例。以下日期记录保留开发过程。
+
 ## AI 升级校验记录（2026-10-12）
 
 - 提供单文件[升级记录与项目校验任务](/modelbase-upgrade-audit.txt)，区分实际行为变化与保留的既有语义，供 AI 检查业务项目。
@@ -17,9 +31,9 @@ permalink: /guide/changelog/
 - 新增 `yarn check:docs`，检查文档路由、导航链接和源代码片段引用。
 - 调整导航、上一页/下一页和表格排版。本轮未修改 core 或 service 的运行时代码。
 
-## 未发布（整理于 2026-09-22）
+## 开发记录（2026-09-22）
 
-本节汇总当前工作区中 ModelBase 与 service 的改动，尚未发布到 npm，也未调整包版本号。
+本节记录准备 1.2.0 期间的实现细节。
 
 ### ModelBase（@model-base/core）
 
