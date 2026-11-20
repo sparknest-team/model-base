@@ -1,13 +1,21 @@
 import { type ServiceResponse } from './ServiceResponse'
 import { Wrapper } from './Wrapper'
+import { convertStream, parseStreamJson } from '../_internal/streamResponse'
 
+/** 流响应转换器；保留同步处理契约，objectURL 路径仅适用于具备浏览器 API 的环境。 */
 export class DataStreamWrapper extends Wrapper {
+  /** 旧转换模式；配置它时不应用新版 responseType 默认值。 */
   public dataType?: 'blob' | 'stream' | 'objectURL'
+  /** 期望客户端返回的传输格式。 */
   public responseType?: 'blob' | 'arraybuffer' | 'json' | 'document' | 'text'
+  /** 包装后期望的数据表示。 */
   public responseObj?: 'blob' | 'objectURL' | 'arraybuffer'
+  /** 按历史 content-type 条件尝试同步解析 JSON。 */
   public autoParseJson?: boolean
+  /** 创建 Blob 时使用的选项，当前读取 type。 */
   public responseObjOptions?: any
 
+  /** 无参数与传入 {} 的默认行为不同，保留此区别供旧调用方兼容。 */
   constructor(data?: {
     /**
      * @deprecated 已经舍弃，建议用 responseType 和 responseObj 进行组合。
@@ -54,7 +62,7 @@ export class DataStreamWrapper extends Wrapper {
     autoParseJson?: boolean
   }) {
     super()
-    // 优先判断 dataType是否为空，如果为空，则可以设置其他参数的默认值。
+    // 只有提供配置对象且未选择旧 dataType 模式时，才应用新版默认值。
     if (data && !data.dataType) {
       this.responseType = data.responseType ?? 'blob'
       this.responseObj = data.responseObj ?? 'blob'
@@ -67,6 +75,7 @@ export class DataStreamWrapper extends Wrapper {
     this.dataType = this.dataType || 'stream'
   }
 
+  /** 原地补充 params.options.responseType，已有真值配置优先。 */
   public processParams(params?: any) {
     params = params || {}
     params.options = params.options || {}
@@ -74,56 +83,19 @@ export class DataStreamWrapper extends Wrapper {
     return params
   }
 
+  /** 区分流载荷和 JSON 响应；本方法修改 response，不返回新的响应容器。 */
   public processData(response: ServiceResponse, res: any) {
-    const dto = res
-    // content-type 不存在或者 不包含 application/json，则按照 blob的处理方式处理。
+    // 非 JSON 类型时整个传输返回值都是载荷，不仅读取 res.data。
     if (!res?.headers?.['content-type'] || res?.headers?.['content-type']?.indexOf('application/json') === -1) {
-      let newObj = dto
-      if (dto) {
-        if (this.responseType) {
-          // 默认只处理 responseType 是 blob 和 arraybuffer 的情况，以及 responseObj 是 blob 和 objectURL 的情况。
-          if (this.responseType === 'blob' && this.responseObj === 'objectURL') {
-            newObj = window.URL.createObjectURL(dto)
-          } else if (this.responseType === 'arraybuffer' && this.responseObj === 'blob') {
-            newObj = new Blob([dto], {
-              type: this.responseObjOptions.type || '',
-            })
-          } else if (this.responseType === 'arraybuffer' && this.responseObj === 'objectURL') {
-            newObj = window.URL.createObjectURL(
-              new Blob([dto], {
-                type: this.responseObjOptions.type || '',
-              }),
-            )
-          }
-        } else {
-          if (this.dataType === 'blob') {
-            newObj = new Blob([dto])
-          }
-          if (this.dataType === 'objectURL') {
-            newObj = window.URL.createObjectURL(new Blob([dto]))
-          }
-        }
+      let data = res
+      if (res) {
+        data = convertStream(this, res)
         response.resultCode = response.resultCode || 'success'
       } else {
         response.resultCode = 'stream_is_empty'
       }
-      // stream默认是没有data属性，dto需要设置到data上
-      response.data = newObj
+      response.data = data
     }
-    if (
-      this.autoParseJson &&
-      // 兼容老版本没有 headers 的情况。
-      response.headers &&
-      response.headers['content-type']?.indexOf('application/json') !== -1
-    ) {
-      if (this.responseType === 'blob') {
-        response.data = JSON.parse(response.data as any)
-      }
-      if (this.responseType === 'arraybuffer') {
-        const array = Buffer.from(response.data as any)
-        const enc = new TextDecoder('utf-8')
-        response.data = JSON.parse(enc.decode(array))
-      }
-    }
+    parseStreamJson(this, response)
   }
 }

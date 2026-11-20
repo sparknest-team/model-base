@@ -48,6 +48,7 @@
 import { debounce } from './debounce'
 import { isObject } from './isObject'
 
+/** 节流复用 debounce 状态机，将 maxWait 固定为 wait；默认允许首沿和尾沿执行。 */
 export function throttle(func: any, wait: number, options: any) {
   let leading = true
   let trailing = true

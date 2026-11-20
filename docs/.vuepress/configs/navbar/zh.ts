@@ -2,16 +2,27 @@ import type { NavbarOptions } from 'vuepress-theme-hope'
 
 export const zhNavBar: NavbarOptions = [
   {
-    text: '开发指南',
-    children: [
-      {
-        text: '快速上手',
-        link: '/guide/start/',
-      },
-      {
-        text: 'LLM 文档',
-        link: '/guide/llm/',
-      },
-    ],
+    text: '学习路线',
+    link: '/guide/roadmap/',
+  },
+  {
+    text: '示例',
+    link: '/guide/examples/',
+  },
+  {
+    text: 'API 速查',
+    link: '/guide/reference/',
+  },
+  {
+    text: 'LLM 文档',
+    link: '/guide/llm/',
+  },
+  {
+    text: 'service',
+    link: '/guide/service/',
+  },
+  {
+    text: '迁移与排错',
+    link: '/guide/migrate/',
   },
 ]

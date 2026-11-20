@@ -2,74 +2,28 @@
 permalink: /method/getOriginalData/
 ---
 
-# getOriginalData 获得对象被更改前的原始数据
+# getOriginalData：读取保存点 DTO
 
-## 说明
+[学习路线](/guide/roadmap/) · [示例索引](/guide/examples/) · [API 速查](/guide/reference/)
 
-### 作用
+## 解决什么问题
 
-获取调用过 saveChangedData 的数据或者初始化的 input 流向数据
+取得创建、显式保存或自动回填保存时的数据基准，不是未经转换的原始接口响应。
 
-### 遍历范围
+## 示例与结果
 
-当前对象通过@Column 声明的字段
+片段来自自动化测试。使用 User、Address、Item 的片段，请先使用[快速上手中的模型定义](/guide/start/)；其他类在片段内定义。所需 core API 从 `@model-base/core` 导入。
 
-## 案例
-
-::: tabs
-
-@tab 案例一
-获取对象通过@Column 声明的字段
-
-### 模型
-
-```ts :no-line-numbers
-<!-- @include: ./noColumn.spec.ts#model -->
+```ts
+<!-- @include: ../../learning/journey.spec.ts#registration -->
 ```
 
-### 实例初始化
+输出注释由 `learning/journey.spec.ts` 中对应断言验证。各片段独立运行，不依赖上一页的修改状态。
 
-```ts :no-line-numbers
-<!-- @include: ./noColumn.spec.ts#instance -->
-```
+## 使用边界
 
-### 打印日志
+返回同一份可变 DTO；修改它会影响比较和还原，不要把它当作只读日志仓库或每次新复制的对象。延迟快照在读取时可能物化。关闭快照返回 {}。
 
-```ts :no-line-numbers
-<!-- @include: ./noColumn.spec.ts#log -->
-```
+## 下一步
 
-@tab 案例二
-获取调用过 saveChangedData 的数据或者初始化的 input 流向数据
-
-### 模型
-
-```ts :no-line-numbers
-<!-- @include: ./init.spec.ts#model -->
-```
-
-### 实例初始化
-
-```ts :no-line-numbers
-<!-- @include: ./init.spec.ts#instance -->
-```
-
-### 修改实例
-
-```ts :no-line-numbers
-<!-- @include: ./init.spec.ts#change -->
-```
-
-### 调用函数
-
-```ts :no-line-numbers
-<!-- @include: ./init.spec.ts#fn -->
-```
-
-### 打印日志
-
-```ts :no-line-numbers
-<!-- @include: ./init.spec.ts#log -->
-```
-
-:::
+[继续阅读 →](/method/saveChangedData/) · [返回按任务检索](/guide/examples/)

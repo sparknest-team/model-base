@@ -2,206 +2,69 @@
 permalink: /guide/migrate/
 ---
 
-## 更新日志
+# 迁移检查清单
 
-[//]: # 'template'
-[//]: # '## 1.1.2'
-[//]: # '#### Feature'
-[//]: # '#### Fix'
-[//]: # '#### Style'
-[//]: # '#### Breaking Change'
-[//]: # '#### Remove'
+本页用于升级已有 ModelBase 项目；从 class-transformer 迁移请阅读[能力对照](/guide/class-transformer/)。
+功能是否已发布，以实际安装版本和[更新日志](/guide/changelog/)为准。
 
-## 1.0.1
+让 AI 检查已有业务项目时，可提供[本轮升级校验记录](/modelbase-upgrade-audit.txt)。它包含行为变化、搜索命令和验证矩阵，应结合项目实际安装版本执行。
 
-## @model-base/core
+<a id="upgrade-1-2"></a>
 
-### change
+## 从 1.1.0 升级到 1.2.0
 
-#### remove `emptyValueScope` 和 `emptyValue`
+在升级分支中对齐项目使用的 ModelBase 包版本，保留旧锁文件以便回退。用同一份业务 DTO 对照升级前后的输出、编辑回滚和成功响应。
 
-#### change `revertChangedDataObject` 还原 class 的时候创建新对象不会设置默认值。
+| 搜索项目中的用法 | 调整与验证 |
+| --- | --- |
+| `enableDataState: false` 配合 `isChanged()`、保存或回滚 | 需要取消编辑或增量提交的实例使用 `Model.create(dto, { enableSnapshot: true })`。编辑一个字段，确认能取到差异并回滚；只做 DTO 映射可继续关闭快照。 |
+| 修改 `model.extra.foo`、普通数组原地更新、持有输入 DTO 引用 | 为需要追踪的对象或集合声明 `model` 或 `childType`，通过模型引用编辑。不透明值由业务保存基准。分别测试修改、查询和还原。 |
+| `IModelUpdateOptions`、`options.current` | 创建配置改用 `IModelOptions`，将当前实例的命名策略、快照配置等移到创建选项顶层。父子模型分别验证命名与追踪，尤其要检查父实例关闭快照时创建的子模型。 |
+| `callMethod({ method, camelCase })`、`extendModel(other, options)` | 改为 `callMethod({ method })` 和 `extendModel(other)`。需要指定输出命名时在序列化步骤设置 `camelCase`，再运行项目的类型检查。 |
+| 自定义响应工厂、依赖普通响应对象 | 工厂接收 `Response.create(dto, wrapper)`，直接构造仍使用 `new ServiceResponse(dto, options, wrapper)`。用成功响应核对模型类型、嵌套字段及输出 DTO。 |
+| Vue watcher、运行时追加列或子类覆盖列 | 回填、回滚可能触发此前漏掉的监听；验证一次操作只触发预期次数的请求。父类追加列后检查子类输出，使用 `ColumnDefine` 注册字段。 |
 
-#### 新装饰器的自动适配`experimentalDecorators`，大家用起来是无感的。
+## 1. 先固定项目现有行为
 
-```ts
-// 新版装饰器
-{
-    "experimentalDecorators": false,
-}
-// 旧版装饰器
-{
-    "experimentalDecorators": true,
-}
-```
+记录典型 DTO 的输入、输出、空值、分组、默认值及回滚结果。升级后对照测试，不只比较方法名。
 
-#### 对`emitDecoratorMetadata`不再进行依赖
+## 2. 统一创建方式
 
-- 变更 1：`ModelBase`的`class`都需要传入`model`。
-- 变更 2：`Column`装饰器的`autowired`不再支持数组，仅支持属性是`ModelBase`类型的自动初始化。
+优先使用 Model.create。默认值移到 Column.default，对象/数组使用工厂。
+不再依赖 emitDecoratorMetadata，子模型使用 model/childType 显式声明。
+保留项目采用的装饰器编译模式，不同时切换库版本和所有编译选项。
 
-```ts
-class UserList extends ModelBase {
-  @Column({
-    model: () => UserModel,
-    default: () => [],
-  })
-  list!: UserModel[]
+## 3. 转换回调逐项迁移
 
-  @Column({
-    model: () => UserModel,
-    default: () => new UserModel(),
-  })
-  userA!: UserModel
+formatter → deserialize，unformatter → serialize。
+旧回调的 key/data/columns 与新回调的 name/property/serializeData 或 deserializeData 不完全一致，
+不能只进行字符串替换。新回调详见[输入转换](/column/formatter/)和[输出转换](/column/unformatter/)。
 
-  @Column({
-    model: () => UserModel,
-    autowired: true,
-  })
-  userB!: UserModel
-}
-```
+## 4. 明确名称与分组
 
-#### change and feature `Column`装饰器增加`deserialize` 和 `serialize`
+name 控制规范名称，aliasName 接收额外输入名；strictNameCheck/strictAliasNameCheck 保留严格名称。
+group 优先于 excludeGroup，未分组字段仍保留。名称变化可能影响历史 DTO，不做自动结构迁移。
 
-- 对应的是旧版本的 `formatter`和`unformatter`
-- 参数全部调整，新的类型为 `IColumnSerialize`和`IColumnDeserialize`
+## 5. 明确快照开关
 
-```ts
-export type IColumnSerialize = {
-  value?: any
-  name: string // 调整，对应旧版本的是key
-  property: string // 新增，属性名
-  deserializeData: T // 调整，对应之前的data，当前class的实例化数据。只读模式
-  column: IColumnInner
-}
-export type IColumnDeserialize = {
-  value?: any
-  name: string // 调整，对应旧版本的是key
-  property: string // 新增，属性名
-  serializeData: any// 调整，对应之前的data，服务器的序列化数据。。只读模式
-  column: IColumnInner
-}
-```
+优先使用 enableSnapshot，enableDataState 继续兼容，同层新名称优先。
+false 时不会保存/还原，也不会给出有效变更查询。
+标准模型树使用延迟快照；未声明子模型类型的对象内部修改不属于自动追踪保证。
 
-#### change and feature `name` 和 `aliseName` 支持传入 `camelCase` 风格的名字
+## 6. 检查更新与保存
 
-- 增加 `strictNameCheck` 和 `strictAliasNameCheck`，设置为 true 后，序列化后强制使用`name` ，初始化强制使用 `aliseName`的名字，和旧的逻辑一致。
-- `name` 和 `aliseName` 支持传入 `camelCase` 风格的名字了。支持序列化函数和反序列化函数(new)通过参数`camelCase`指定输入和输出。
-- `name` 对应服务端的返回数据属性字段，如果服务端是下划线，则填入下划线数据，如果服务端是驼峰的，本次调整后，会根据默认的命名策略来适配，默认是`mix`模式，同时支持`camelCase` 和 `snakeCase`
+update 自动保存新基准。用户编辑应直接赋值。
+setDataByOriginal 默认保存，keepBackUp: true 保留旧基准。
+getOriginalData 返回可变引用，不应被无意修改。
 
-- 变更前
+## 7. 检查动态定义和继承
 
-```ts
-class UserModel extends ModelBase {
-  @Column({ name: 'testUserA' })
-  testUserA!: number
-  @Column({ name: 'test_user_b' })
-  testUserA!: number
-  @Column({ name: 'total_result' })
-  total!: string
-}
-const user = new UserModel({ testUserA: 'usera', test_user_b: 'userb' })
-user.getSerializableObject()
-// { testUserA: 'usera', test_user_b: 'userb' }
-user.getSerializableObject({ camelCase: true })
-// { testUserA: 'usera', test_user_b: 'userb' }
-```
+dynamicModelBase 生成的类按静态结构缓存；columnsInValue 仍实时推断。
+运行时注册使用 ColumnDefine，不改内部元数据或共享缓存。继承、同名覆盖和多实例数据需要独立 case。
 
-- 变更后
+## 8. service 项目额外检查
 
-```ts
-class UserModel extends ModelBase {
-  @Column({ name: 'testUserA' })
-  testUserA!: number
-  @Column({ name: 'testUserB' }) // 支持驼峰了
-  testUserA!: number
-  @Column({ name: 'totalResult' }) // 支持驼峰了
-  total!: string
-}
-const user = new UserModel({ testUserA: 'usera', test_user_b: 'userb' })
-user.getSerializableObject()
-// { test_user_a: 'usera', test_user_b: 'userb' }
-user.getSerializableObject({ camelCase: true })
-// { testUserA: 'usera', testUserB: 'userb' }
-```
+CoreService 接收 Driver，而不是裸 HTTP 客户端。ServiceResponse.create 第二参数是 wrapper，不是模型 options。
+客户端返回格式、业务成功码、请求钩子和 wrapper 并发状态请按[service 指南](/guide/service/)逐项验证。
 
-```ts
-class UserModel extends ModelBase {
-  @Column({ name: 'testUserA', strictNameCheck: true }) // strictAliasNameCheck也是同样的道理。
-  testUserA!: number
-  @Column({ name: 'test_user_b', strictNameCheck: true })
-  testUserA!: number
-  @Column({ name: 'total_result', strictNameCheck: true })
-  total!: string
-}
-const user = new UserModel({ testUserA: 'usera', test_user_b: 'userb' })
-user.getSerializableObject()
-// { testUserA: 'usera', test_user_b: 'userb' }
-user.getSerializableObject({ camelCase: true })
-// { testUserA: 'usera', test_user_b: 'userb' }
-```
-
-### Feature
-
-##### 标准化 `IModelProps`，以下作用域范围由大到小。
-
-- class: 通过`@DataModel`类装饰器传入，作用域在整个`class`上生效。
-
-- instance: 支持`new`时候传入`IModelProps`，作用域在当前实例上生效。
-
-- init: 在`new`的时候传入`IModelProps.current`属性，作用域在初始化阶段生效。
-
-```ts
-interface IModelProps {
-  noDefault?: boolean // 初始化不设置默认值
-  enableDataState?: boolean // 是否启用数据状态
-  keepModelName?: boolean // 是否采用dto数据中的模型的key
-  columnsInValue?: boolean // 是否根据模型实例中的值来初始化模型的列
-  deserializeNamingStrategies?: 'mix' | 'camelCase' | 'snakeCase'
-  serializeNamingStrategies?: 'camelCase' | 'snakeCase'
-}
-```
-
-##### 标准化 `model`和 `default`的传入，推荐函数式传入。
-
-    model的函数式传入可以避免循环依赖
-
-    default的函数式传入可以避免
-
-```ts
-class UserList extends ModelBase {
-  @Column({
-    model: () => UserModel,
-    default: () => [],
-  })
-  list!: UserModel[]
-}
-```
-
-##### 内部标准化实例化统一用 `Class.create()`，避免 typescript 的`useDefineForClassFields`不同配置对实例化的效果造成影响。
-
-##### 新旧装饰器都不允许通过`ClassField`进行`define`。请使用`default`
-
-```ts
-// 不支持
-class UserModel extends ModelBase {
-  @Column()
-  id!: number = 1 // 不支持
-  @Column()
-  name!: string = 'user1' // 不支持
-  @Column()
-  list!: string = [] // 不支持
-}
-// 支持
-class UserModel extends ModelBase {
-  @Column({ default: 1 })
-  id!: number
-  @Column({ default: 'user1' })
-  name!: string
-  @Column({ default: () => [] }) // 引用类型请使用函数。
-  list!: string
-}
-```
-
-##### 支持`lodash`对`ModelBase`实例进行克隆
+[迁移后运行完整示例](/guide/examples/) · [更新日志](/guide/changelog/)

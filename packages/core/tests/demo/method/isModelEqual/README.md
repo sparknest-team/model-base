@@ -2,45 +2,28 @@
 permalink: /method/isModelEqual/
 ---
 
-# isModelEqual 是否和其他模型等效
+# isModelEqual：兼容的字段比较方法
 
-## 说明
+[学习路线](/guide/roadmap/) · [示例索引](/guide/examples/) · [API 速查](/guide/reference/)
 
-### isModelEqual 的参数
+## 解决什么问题
 
-**isModelEqual(targetData: ModelBase, params?: { ignoreEmptyString?: boolean })**
+保留现有字段比较行为，适合已经验证命名和数据形状的旧业务。
 
-- **targeData**：比较的目标对象。
-- **params**：可选
-  - **ignoreEmptyString**：如果设置 true 并且当前值和目标值存在 undefined 的情况下，会视为''和 undefined 为相等。
+## 示例与结果
 
-### 遍历范围
+片段来自自动化测试。使用 User、Address、Item 的片段，请先使用[快速上手中的模型定义](/guide/start/)；其他类在片段内定义。所需 core API 从 `@model-base/core` 导入。
 
-当前对象通过 **@Column** 声明的字段
-
-## 案例
-
-::: tabs
-
-@tab 案例一
-比较两个实例化的对象是否相等（一般常见于同一个模型的不同实例）
-
-### 模型
-
-```ts :no-line-numbers
-<!-- @include: ./init.spec.ts#model -->
+```ts
+<!-- @include: ../../learning/journey.spec.ts#comparison -->
 ```
 
-### 实例初始化
+输出注释由 `learning/journey.spec.ts` 中对应断言验证。各片段独立运行，不依赖上一页的修改状态。
 
-```ts :no-line-numbers
-<!-- @include: ./init.spec.ts#instance -->
-```
+## 使用边界
 
-### 打印日志
+内部按列的序列化名称访问值，不等于任意两个模型的深相等，也不是 isChanged 的替代品。涉及驼峰、name、嵌套对象时，先统一 DTO 并明确业务比较规则。
 
-```ts :no-line-numbers
-<!-- @include: ./init.spec.ts#log -->
-```
+## 下一步
 
-:::
+[继续阅读 →](/method/isContainsModel/) · [返回按任务检索](/guide/examples/)

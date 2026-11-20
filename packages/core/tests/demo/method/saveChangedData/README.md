@@ -2,118 +2,28 @@
 permalink: /method/saveChangedData/
 ---
 
-# saveChangedData 保存状态
+# saveChangedData：确认当前数据为基准
 
-## 说明
+[学习路线](/guide/roadmap/) · [示例索引](/guide/examples/) · [API 速查](/guide/reference/)
 
-将当前数据状态保存为新的基准点（快照）。调用后：
-- `isChanged()` 返回 `false`
-- `getChangedData()` 返回 `{}`
-- `revertChangedData()` 将恢复到此状态
+## 解决什么问题
 
-## 方法签名
+提交成功后，在业务允许的时机建立新的本地保存点。
 
-```ts
-saveChangedData(params?: {
-  group?: string           // 仅保存指定分组
-  excludeGroup?: string    // 排除指定分组
-  enableDataState?: boolean // 是否启用状态保存
-}): this
-```
+## 示例与结果
 
-## 使用场景
-
-### 场景一：提交成功后重置状态
+片段来自自动化测试。使用 User、Address、Item 的片段，请先使用[快速上手中的模型定义](/guide/start/)；其他类在片段内定义。所需 core API 从 `@model-base/core` 导入。
 
 ```ts
-const user = new User({ user_name: 'John' })
-
-// 用户修改数据
-user.userName = 'Jane'
-console.log(user.isChanged()) // true
-
-// 提交成功
-await api.updateUser(user.getChangedData())
-
-// 保存新状态
-user.saveChangedData()
-console.log(user.isChanged()) // false
+<!-- @include: ../../learning/journey.spec.ts#lifecycle -->
 ```
 
-### 场景二：异步数据初始化
+输出注释由 `learning/journey.spec.ts` 中对应断言验证。各片段独立运行，不依赖上一页的修改状态。
 
-```ts
-const form = new FormModel({})
+## 使用边界
 
-// 异步获取表单初始值
-const data = await api.getFormData()
-form.update(data)
+不发送网络请求，也不维护多级撤销栈。update 和默认 setDataByOriginal 已自动保存。保存时的 group/excludeGroup 是筛选基准，不是多个互不干扰的分组快照。关闭快照时调用无效。
 
-// 将异步数据作为初始状态（不视为"变更"）
-form.saveChangedData()
+## 下一步
 
-// 此时 isChanged() 为 false
-// 用户后续修改才会被检测为变更
-```
-
-### 场景三：分步骤保存
-
-```ts
-// 第一步完成
-user.userName = 'Step 1 Value'
-user.saveChangedData()
-
-// 第二步修改
-user.email = 'step2@test.com'
-
-// 仅获取第二步的变更
-user.getChangedData() // { email: 'step2@test.com' }
-```
-
-## 与分组配合使用
-
-```ts
-// 仅保存 basic 分组的状态
-user.saveChangedData({ group: 'basic' })
-
-// 排除 temp 分组（临时数据不保存状态）
-user.saveChangedData({ excludeGroup: 'temp' })
-```
-
-## 案例
-
-::: tabs
-
-@tab 案例一
-
-### 模型
-
-```ts :no-line-numbers
-<!-- @include: ./init.spec.ts#model -->
-```
-
-### 实例初始化
-
-```ts :no-line-numbers
-<!-- @include: ./init.spec.ts#instance -->
-```
-
-### 修改实例
-
-```ts :no-line-numbers
-<!-- @include: ./init.spec.ts#change -->
-```
-
-### 调用函数
-
-```ts :no-line-numbers
-<!-- @include: ./init.spec.ts#fn -->
-```
-
-### 打印日志
-
-```ts :no-line-numbers
-<!-- @include: ./init.spec.ts#log -->
-```
-
-:::
+[继续阅读 →](/method/revertChangedData/) · [返回按任务检索](/guide/examples/)

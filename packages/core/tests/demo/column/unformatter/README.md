@@ -2,45 +2,28 @@
 permalink: /column/unformatter/
 ---
 
-# unformatter 反格式化
+# serialize：模型到 DTO 的转换
 
-## 说明
+[学习路线](/guide/roadmap/) · [示例索引](/guide/examples/) · [API 速查](/guide/reference/)
 
-input 流向数据格式化
+## 解决什么问题
 
-## 案例
+输出接口数据时按业务约定转换字段值。unformatter 是旧兼容名称。
 
-::: tabs
+## 示例与结果
 
-@tab 案例一
+片段来自自动化测试。使用 User、Address、Item 的片段，请先使用[快速上手中的模型定义](/guide/start/)；其他类在片段内定义。所需 core API 从 `@model-base/core` 导入。
 
-### 格式化函数
-
-```ts :no-line-numbers
-<!-- @include: ./init.spec.ts#fn -->
+```ts
+<!-- @include: ../../learning/journey.spec.ts#conversion -->
 ```
 
-### 模型
+输出注释由 `learning/journey.spec.ts` 中对应断言验证。各片段独立运行，不依赖上一页的修改状态。
 
-```ts :no-line-numbers
-<!-- @include: ./init.spec.ts#model -->
-```
+## 使用边界
 
-### 实例初始化
+新代码使用 serialize；回调应考虑空值和重复调用。自定义序列化会参与快照生成，使用即时兼容路径，不应假定回调只在显式提交时执行。
 
-```ts :no-line-numbers
-<!-- @include: ./init.spec.ts#instance -->
-```
+## 下一步
 
-### 打印日志
-
-```ts :no-line-numbers
-<!-- @include: ./init.spec.ts#log -->
-```
-
-:::
-
-## 注意事项
-
-- `unformatter` 是将数据给后端时进行格式化
-- 如果从后端拿数据时需要进行格式化，请参考 [`formatter`](/column/formatter/README.md)
+[继续阅读 →](/column/trim/) · [返回按任务检索](/guide/examples/)

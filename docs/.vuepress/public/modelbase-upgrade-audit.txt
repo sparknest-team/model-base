@@ -1,0 +1,114 @@
+# ModelBase 本轮升级记录与 AI 项目校验任务
+
+适用于从 1.1.0 升级到 1.2.0 的项目。请先核对锁文件中的实际版本。完整的类型迁移说明见 /guide/migrate/。
+
+## 给执行校验的 AI
+
+请读取本文件，然后检查用户指定的业务项目，判断升级到上述实现是否会改变业务行为。先检查代码、依赖和已有测试；逐项给出通过、存在风险、不适用或证据不足。只有找到实际调用或测试证据才下结论。默认执行校验并输出报告；修复业务代码需要用户授权。不要修改 lockfile、自动升级依赖、访问生产接口或确认业务保存点来完成检查。
+
+报告应包含：依赖版本与解析路径、风险等级、文件和行号、触发场景、旧行为/目标行为、建议修改、已运行验证与结果、仍未验证的路径。无调用的功能记为不适用；没有可执行证据的行为不要写成通过。
+
+## 1. 哪些是实际行为变化
+
+### A. 快照开关语义收紧（高优先级）
+
+新增 `enableSnapshot`，默认 true；旧 `enableDataState` 继续有效。同层新名称优先，实例配置优先于类配置。关闭快照现在统一关闭保存、变更查询和回滚，而不是只跳过初始化保存。
+
+目标行为：关闭时 `getOriginalData()`、`getChangedData()`、`getChangedDescriptor()` 返回空对象；`isChanged()` 返回 false；保存与还原不修改保存点/模型。子模型随父模型创建路径继承关闭配置，不影响进程中其他模型。已开启实例上 `saveChangedData({ enableSnapshot: false })` 只跳过本次保存，不切换实例模式。
+
+检查项目是否关闭快照后仍使用取消编辑、未保存提示、增量提交、审计或原值读取。这样的调用不能靠旧名称兼容解决，应按业务需要开启快照或自管基准。若同时配置两个开关，核对生效值。
+
+### B. 开启快照使用 Proxy 和延迟保存点（高优先级）
+
+标准静态模型树创建时不额外构建完整旧 DTO；首次写入记录旧值，查询时按需重建。自定义序列化、访问器、数据驱动列等保留即时快照兼容路径。
+
+开启追踪的实例是代理，原生 `structuredClone(model)`、worker 消息克隆等可能失败。应先输出 DTO，再确认 DTO 值满足传输/克隆约束。检查项目是否依赖原始实例身份、第三方代理包装、直接读取 `__CLONE__`、constructor 元数据或旧快照存储。改用公开状态 API。`getOriginalData()` 仍返回可变的保存点引用，不能无意修改。
+
+### C. 未声明类型的复杂值追踪范围收窄（高优先级）
+
+显式 `model` / `childType` 的子模型与受支持集合参与追踪。普通 `@Column() extra: object` 或未声明元素类型的数组，不再保证内部修改自动检测和还原。
+
+检查 `model.extra.foo = value`、普通数组 push/splice、Date/Map/Set 内部更新，以及外部引用修改。若这些用于脏状态判断或取消编辑，必须补充业务验证并选择显式建模或自管状态。不要把所有 DTO 初始化理解成无条件深克隆；显式子模型会创建新实例，普通不透明值保留既有映射边界。
+
+### D. service 成功响应 wrapper 修复（高优先级）
+
+CoreService 现在按 `Response.create(dto, wrapper)` 调用响应工厂，修复过去 wrapper 参数错位。原先依赖未包装普通对象的代码，升级后可能收到真正的模型或集合。
+
+检查自定义响应类的静态 create 签名、响应 data 访问、`instanceof`、输出命名、默认值和序列化。`ServiceResponse.create(dto, wrapper)` 与 `new ServiceResponse(dto, options, wrapper)` 的第二参数不同，不能混用。自定义类若曾适配旧错误的三参数调用，需要调整并验证。
+
+### E. 列缓存与继承修复（中优先级）
+
+静态列由注册表统一解析；父类注册会使相关子类计划按需更新，子类同名覆盖优先，无关类不需要重建。`getColumns()` 返回独立副本；`getColumnsCached()` 返回共享读取结果。直接改查询结果不是注册操作。运行时新增/覆盖列走 `ColumnDefine`。
+
+注册列只更新结构，不自动确认业务修改、不自动重置快照。已有字段重命名或转换规则改变不自动迁移旧基准。检查动态注册、父子类覆盖、修改共享缓存和覆盖 getColumns 的业务。`columnsInValue` 仍根据当前 DTO/实例实时推断，不是仅初始化一次；同类不同实例可有不同字段。
+
+### F. Vue 3 更新与回滚通知修复（中优先级）
+
+update、重填和回滚沿用调用方的外层响应式代理写回，使 watcher 能观察。检查界面副作用是否曾依赖这些路径不触发通知，以及是否存在重复请求、自动保存或循环 watcher。日常修改应通过 reactive 返回的对象进行；关闭 ModelBase 快照不关闭 Vue 响应式。
+
+## 2. 本轮保留但需要核对的既有语义
+
+以下是目标实现继续保留的行为，不应全部误报为新增破坏性变化：
+
+- `update(dto)` 增量回填并自动保存新基准；它不适合未提交的本地编辑。模型数组按主键合并，不默认删除输入中缺失的既有元素。
+- `setDataByOriginal(dto)` 默认建立新基准；`keepBackUp: true` 保留旧基准。其他创建配置不能假定都会被该方法消费。
+- group 优先于 excludeGroup，未分组字段仍保留。分组不是权限机制。
+- 字段名、别名、清理与 serialize/deserialize 回调参与 DTO 边界；TypeScript 类型不提供运行时校验。旧 formatter/unformatter 继续兼容，回调参数不同，不能机械改名。
+- `isModelEqual` 是旧式逐列值比较，按列的序列化名称取值，不先运行完整序列化，也不判断模型类相同；复杂值保留 JSON 语义。`equal()` 基类返回 true，不能当默认深比较。
+- getSerializableString/getCleanSerializableString 生成 JSON 文本，本身不比较模型。复杂比较仍可能 JSON.stringify，循环引用、BigInt、toJSON 和键顺序按原有 JSON 行为处理。
+- Driver 需提供 getApi，不是裸 HTTP 客户端；CoreService 不自动拼接 Driver.url。钩子为同步转换，执行顺序和异常边界保留；预处理错误可能拒绝 Promise，传输/后续转换错误通常进入 serviceError。
+- Wrapper 是有状态对象，并发请求需各自持有实例。DataStreamWrapper 保留同步 JSON 解析和浏览器 objectURL 能力要求。
+
+## 3. 第一轮搜索
+
+在业务项目根目录按实际目录调整以下命令；跳过 node_modules、dist 和生成目录。输出可能只是候选位置，继续沿调用链查实际行为。
+
+```sh
+rg -n '"@model-base/(core|service|common)"' --glob 'package.json'
+rg -n 'enableDataState|enableSnapshot|noDefault|columnsInValue' src test tests
+rg -n 'getOriginalData|isChanged|getChangedData|getChangedDescriptor|saveChangedData|revertChangedData' src test tests
+rg -n 'structuredClone|postMessage|__CLONE__|__COLUMNS__|getColumnsCached|ColumnDefine|getColumns\(' src test tests
+rg -n 'extends ModelBase|@Column|childType|model:' src test tests
+rg -n 'CoreService|ServiceResponse|new Driver|wrapper:|beforeParse|afterParse|beforeDeserialize|afterDeserialize' src test tests
+rg -n 'isModelEqual|isContainsModel|\.equal\(|getSerializableString|getCleanSerializableString' src test tests
+```
+
+同时查 lockfile、工作区 overrides/resolutions 和依赖树，确认是否安装多份 ModelBase。多份当前实现已有兼容测试，但不能外推到任意历史版本或跨 realm。不要仅凭 package.json 的版本范围断定实际运行版本。
+
+## 4. 最小业务验证矩阵
+
+使用项目真实模型和 DTO，运行用户允许的本地测试，不访问生产系统。优先复用已有测试；缺少关键证据时列出需补充的 case。
+
+1. 创建后未改动：输入/输出名字、默认值、null、undefined、group、clean 与升级前一致；isChanged 为 false。
+2. 基本字段编辑：变化可读，改回原值为未变，保存后未变，回滚恢复最近基准。
+3. 显式子模型：外部 DTO 与实例隔离；子字段赋值、替换引用、数组增删/重排、主键变化及父子独立保存点符合业务预期。
+4. 关闭快照：DTO 转换仍有效；所有状态与回滚路径按关闭语义工作。覆盖类关闭/实例开启、类开启/实例关闭和两个开关同时出现。
+5. 不透明复杂字段：按项目的真实修改方式验证，并报告追踪保证不足的依赖。
+6. 更新/重填：增量字段与模型数组合并正确，保存点变化符合预期；不要通过 update 验证用户编辑脏状态。
+7. 动态列/继承：父类预热后追加列，子类覆盖，两个实例不同字段，注册时已有编辑不被自动保存。
+8. Vue：通过 reactive 对象进行编辑、update、重填和回滚，等待 nextTick 后检查界面/watch；排查 watcher 重入。
+9. service：成功响应 data 为期望模型/集合，失败码与 serviceError 可见；自定义响应工厂、钩子顺序、请求参数清理和并发 wrapper 均验证。
+10. Node：以真实数量与字段形状检查批量初始化、编辑、查询与回滚；区分创建耗时、峰值内存和保留内存。不能从单次小样本推断生产性能提升比例。
+
+## 5. 报告格式
+
+先给升级结论：可升级 / 补充验证后升级 / 存在需修复的问题 / 目标版本不明确。
+
+每个发现使用如下字段：
+
+| ID | 等级 | 状态 | 文件:行号 | 实际触发场景 | 目标行为 | 建议与验证 |
+|---|---|---|---|---|---|---|
+| A-01 | 高 | 风险/通过/不适用/证据不足 | 实际位置 | 实际业务调用 | 引用上文对应项 | 测试结果或待办 |
+
+附上运行命令、退出结果、未覆盖的业务场景和是否改动了项目。只有实际执行成功的检查可以标为通过。推荐优先解决 A/B/C/D，再评估缓存与响应式副作用。
+
+## 6. 补充资料与验证基线
+
+- 完整用法：`/llms-full.txt`；文档目录：`/llms.txt`。
+- 人类可读变更：`/guide/changelog/`；迁移步骤：`/guide/migrate/`。
+- 核心回归：仓库 `packages/core/tests/unit`，尤其 snapshotOptions、lazySnapshot、proxyTracking、columnRegistry、dynamicModelLifecycle、changeTrackingCompatibility。
+- service 回归：仓库 `packages/service/tests/unit`，尤其 serviceCompatibility、publicSurface 和 coreService。
+- 上一次全量回归记录：103 个套件、442 个通过、2 个待办（2026-09-23）。这不是目标业务项目的验证结果，也不是本文件生成当天重新执行的结果。
+- 最新本地文档检查和构建在 AI 指南生成时通过；业务项目仍需按本文件单独验证。
+
+本记录不承诺完全替代 class-transformer，也没有增加自动重试、超时、取消、全局客户端或数据库功能。文档和内部拆分本身不要求业务进行对应迁移；以真实使用到的运行时差异决定改动。

@@ -2,34 +2,28 @@
 permalink: /method/getColumnData/
 ---
 
-# getColumnData 获取字段元数据
+# getColumnData：按实例属性名读取
 
-## 说明
+[学习路线](/guide/roadmap/) · [示例索引](/guide/examples/) · [API 速查](/guide/reference/)
 
-一般用于遍历获取列数据
+## 解决什么问题
 
-## 案例
+在配置驱动的界面中，根据字符串属性名读取当前值。
 
-::: tabs
+## 示例与结果
 
-@tab 案例一
+片段来自自动化测试。使用 User、Address、Item 的片段，请先使用[快速上手中的模型定义](/guide/start/)；其他类在片段内定义。所需 core API 从 `@model-base/core` 导入。
 
-### 模型
-
-```ts :no-line-numbers
-<!-- @include: ./init.spec.ts#model -->
+```ts
+<!-- @include: ../../learning/journey.spec.ts#access -->
 ```
 
-### 实例初始化
+输出注释由 `learning/journey.spec.ts` 中对应断言验证。各片段独立运行，不依赖上一页的修改状态。
 
-```ts :no-line-numbers
-<!-- @include: ./init.spec.ts#instance -->
-```
+## 使用边界
 
-### 打印日志
+不使用 DTO 字段名，不执行反序列化、不注册字段。字段名已知时直接访问 user.displayName 更清楚。
 
-```ts :no-line-numbers
-<!-- @include: ./init.spec.ts#log -->
-```
+## 下一步
 
-:::
+[继续阅读 →](/method/setColumnData/) · [返回按任务检索](/guide/examples/)

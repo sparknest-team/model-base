@@ -61,6 +61,11 @@
 import { root } from '../internal/root'
 import { isObject } from './isObject'
 
+/**
+ * 防抖：保留最近一次参数与 this，并返回最近一次实际执行的结果。
+ * 默认只执行尾沿；可用 leading/maxWait 控制首沿和最长等待，cancel/flush/pending 管理调度。
+ * wait 的现有类型声明为必填；运行时未提供且支持 RAF 时走动画帧路径。
+ */
 export function debounce(
   func: any,
   wait: number,
@@ -93,6 +98,7 @@ export function debounce(
     trailing = 'trailing' in options ? !!options.trailing : trailing
   }
 
+  /** 执行前释放参数引用，避免回调重入时覆盖新一轮待执行参数。 */
   function invokeFunc(time: number) {
     const args = lastArgs
     const thisArg = lastThis
@@ -103,6 +109,7 @@ export function debounce(
     return result
   }
 
+  /** 统一调度入口；RAF 模式不按毫秒定时，显式 wait=0 则使用 setTimeout。 */
   function startTimer(pendingFunc: any, wait: number) {
     if (useRAF) {
       root.cancelAnimationFrame(timerId)
@@ -111,6 +118,7 @@ export function debounce(
     return setTimeout(pendingFunc, wait)
   }
 
+  /** 与创建时的调度模式成对取消，不混用 timeout 和 RAF 标识。 */
   function cancelTimer(id: NodeJS.Timeout) {
     if (useRAF) {
       return root.cancelAnimationFrame(id)
@@ -118,6 +126,7 @@ export function debounce(
     clearTimeout(id)
   }
 
+  /** 开始新窗口；即使立即执行首沿，也保留定时器用于处理后续尾沿。 */
   function leadingEdge(time: number) {
     // Reset any `maxWait` timer.
     lastInvokeTime = time
@@ -127,6 +136,7 @@ export function debounce(
     return leading ? invokeFunc(time) : result
   }
 
+  /** 同时受静默间隔和 maxWait 上限约束，取下一次最早需要检查的时刻。 */
   function remainingWait(time: number) {
     const timeSinceLastCall = time - lastCallTime
     const timeSinceLastInvoke = time - lastInvokeTime
@@ -135,6 +145,7 @@ export function debounce(
     return maxing ? Math.min(timeWaiting, maxWait - timeSinceLastInvoke) : timeWaiting
   }
 
+  /** 首次调用、静默超时、时钟回拨或达到最长等待都允许进入执行边界。 */
   function shouldInvoke(time: number) {
     const timeSinceLastCall = time - lastCallTime
     const timeSinceLastInvoke = time - lastInvokeTime
@@ -150,6 +161,7 @@ export function debounce(
     )
   }
 
+  /** 定时器到期后重新核对最近调用；窗口内有新调用则继续等待剩余时间。 */
   function timerExpired() {
     const time = Date.now()
     if (shouldInvoke(time)) {
@@ -159,6 +171,7 @@ export function debounce(
     timerId = startTimer(timerExpired, remainingWait(time))
   }
 
+  /** 尾沿只消费尚未执行的参数；单次首沿调用不会再重复执行一次尾沿。 */
   function trailingEdge(time: number) {
     timerId = undefined
 
@@ -171,6 +184,7 @@ export function debounce(
     return result
   }
 
+  /** 取消待执行任务并释放参数/this 引用；保留最近一次返回值。 */
   function cancel() {
     if (timerId !== undefined) {
       cancelTimer(timerId)
@@ -179,14 +193,17 @@ export function debounce(
     lastArgs = lastCallTime = lastThis = timerId = undefined as any
   }
 
+  /** 有待执行窗口时立即结算尾沿，否则返回最近一次执行结果。 */
   function flush() {
     return timerId === undefined ? result : trailingEdge(Date.now())
   }
 
+  /** 表示内部是否登记了待处理的调度窗口，不表示回调当前正在执行。 */
   function pending() {
     return timerId !== undefined
   }
 
+  /** 每次调用只替换最近参数，不为所有调用创建独立的任务队列。 */
   function debounced(...args: any[]) {
     const time = Date.now()
     const isInvoking = shouldInvoke(time)

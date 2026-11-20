@@ -2,197 +2,142 @@
 permalink: /guide/faq/
 ---
 
-## 常见问题
-### typescript5的问题
-::: info typescript5的问题
+# 常见问题
 
-项目的输出目标必须是es5才可以正确的启用emitDecoratorMetadata
+## 应该使用 `new` 还是 `Model.create()`？
 
-:::
-### vite集成modelbase
+两种方式都支持。项目配置复杂、需要兼容不同装饰器编译模式时，建议统一使用
+`Model.create(dto, options)`，便于保持一致的初始化行为。
 
-::: info vite集成modelbase
+## 为什么字段没有出现在模型或序列化结果中？
 
-因为 vite 是强依赖 esbuild 的，而 esbuild 的最大特性就是速度快，所以也不愿意支持完整的 typescript type checker。
-导致 vite 不能和 reflect-metadata 一起使用，比较有名的框架包括 typeorm，nestjs 等都不能很好的结合。
+默认只有使用 `@Column()` 声明的字段参与初始化和序列化；显式开启 `columnsInValue` 时会从当前数据推断字段。还应检查：
 
-方案1：[vite支持decorator](https://www.bilibili.com/opus/532019046365278571)
+- 是否传入了 `group` 或 `excludeGroup`；
+- DTO 字段名是否符合当前反序列化命名策略；
+- 字段是否被 `clean` 空值策略移除；
+- TypeScript 的装饰器配置是否与项目构建工具一致。
 
-方案2：
+## 嵌套对象为什么仍是普通对象？
+
+嵌套字段必须显式声明 `model`：
+
 ```ts
-import typescript from '@rollup/plugin-typescript'
-
-export default defineConfig({
-  plugins: [
-    // 所有应用到ModelBase的文件都需要被拦截，路径加入到include当中。
-    typescript({
-        include: ['src/**/*.ts']
-      })
-  ],
-})
-
+class User extends ModelBase {
+  @Column({ model: () => Address })
+  address?: Address
+}
 ```
-:::
-## undefined问题
-### 启用meta配置
 
-::: info 启用配置
+推荐使用函数形式 `() => Address`，可以减少循环依赖和模块加载顺序问题。
 
-因为modelbase利用reflect-metadata，所以我们需要在tsconfig.json里面启用如下配置：
+## update 后为什么没有变化？
+
+`update(dto)` 自动保存更新后的基准，适合服务端回填。待提交的用户编辑使用属性赋值或
+`setColumnData`。需要重填但保留旧基准时，使用 `setDataByOriginal(dto, { keepBackUp: true })`。
+参见[编辑流程](/guide/editing/)。
+
+## 动态工厂生成的模型会每次重算列吗？
+
+不会。`dynamicModelBase` 生成的类仍按固定结构缓存；`columnsInValue` 才会随当前数据推断字段。
+通过 `ColumnDefine` 注册会使受影响的继承计划按需更新，但不自动保存已有实例的数据修改。
+`getColumns()` 返回副本，`getColumnsCached()` 返回共享结果，不要通过修改它们来注册列。
+
+## 文档示例是否经过测试？
+
+连续教程引用 `packages/core/tests/demo/learning` 与 `packages/service/tests/demo` 中的命名片段，
+输出由同一文件的断言验证。专题页保留原地址；旧目录中的历史 `.ts` 演示不等于完整回归保证。
+运行方式见[示例索引](/guide/examples/)。
+
+## 如何关闭变更追踪？
+
+如果某个模型只负责 DTO 转换，可以在类上关闭：
+
 ```ts
-"compilerOptions": {
+@DataModel({ enableSnapshot: false })
+class ApiResult extends ModelBase {}
+```
+
+也可以只对本次创建的模型树关闭：
+
+```ts
+const result = ApiResult.create(dto, { enableSnapshot: false })
+```
+
+`enableDataState` 仍作为兼容别名使用。配置优先级为实例 > 类 > 默认值（true），
+同一层同时提供两个名称时 `enableSnapshot` 优先。
+
+关闭后不启用模型 Proxy、不保存快照：`getOriginalData()`、`getChangedData()`、
+`getChangedDescriptor()` 返回 `{}`，`isChanged()` 返回 `false`，
+`saveChangedData()` 和 `revertChangedData()` 不执行保存或回滚，显式保存参数也不能绕过关闭配置。
+DTO 转换和普通更新正常工作；父模型关闭时，由它创建的子模型也关闭快照。
+
+开启时，基本类型字段及显式声明 `model` / `childType` 的子模型支持变更检测和还原。
+普通模型初始化只创建实例数据和追踪元数据，不额外递归复制完整快照。
+字段首次修改时，仅在所属节点记录旧值；重复修改同一字段不会覆盖最初的旧值，也不会通知祖先深复制。
+读取原始数据、计算变更或还原时，才按需重建保存点的数据。
+
+## 嵌套变化的追踪边界是什么？
+
+```ts
+class Address extends ModelBase {
+  @Column() city!: string
+}
+
+class User extends ModelBase {
+  @Column({ model: Address }) address!: Address
+  @Column({ model: Address }) addresses!: Address[]
+  @Column() extra!: Record<string, unknown>
+}
+
+const dto = { address: { city: '北京' } }
+const user = User.create(dto)
+user.address.city = '上海'
+user.getChangedData() // { address: { city: '上海' } }
+user.revertChangedData()
+user.address.city // '北京'
+```
+
+- `new User(dto)` 与 `User.create(dto)` 都会递归创建声明了子模型类型的字段，不复用输入中的子模型 DTO 对象。
+- 子模型数组支持增删、排序、索引替换和 `length` 修改；`record` / `recordArray` 支持键及内部集合的修改。
+- 子模型先修改、再整体替换引用，仍能还原到保存点的原值。
+- 父子模型可以分别调用 `saveChangedData()`，各自保存点互不覆盖。
+- **没有声明 `model` / `childType` 的对象或数组是不透明值，不保证其内部修改能被检测或还原。**
+  初始化时普通对象保持原引用，普通数组保持既有复制行为；不增加深层代理。开发者应自行管理这些值，
+  或将需要追踪的结构定义为子模型。Date、Map、Set 等内部状态同样不属于自动深层追踪范围。
+- 如需自行管理不透明值，可在修改前显式读取 `getOriginalData()`，使当前保存点生成独立 DTO；
+  这会产生复制成本。不要依赖一次偶然的变更查询已经为这些值生成了快照。
+- 自定义 `serialize` / `unformatter`、访问器、动态列及旧式快照存储保留即时快照兼容路径，
+  以保持保存时的回调和取值行为；包含这些子节点的父模型也可能走兼容路径。
+
+延迟快照不是零内存：代理、保存点关系和修改日志仍有成本。尤其是字段很少的小模型，
+元数据可能比原来的快照更大；批量执行完整快照查询也会重新分配保存点数据。
+Node 测量方式及结果见仓库 `packages/core/PERFORMANCE.md`。
+
+## `group` 和 `excludeGroup` 同时传入时如何处理？
+
+`group` 优先，`excludeGroup` 被忽略。为保持调用意图清晰，通常只传其中一个。
+
+## 是否依赖 `reflect-metadata`？
+
+当前版本不依赖 `emitDecoratorMetadata`。字段类型和嵌套模型关系应通过 `@Column`
+选项显式声明。
+
+## `useDefineForClassFields` 有什么影响？
+
+不同 TypeScript 和构建工具组合对类字段初始化顺序的处理不同。建议优先使用
+`Model.create()`，并按项目实际编译模式运行测试。若使用旧版装饰器配置，可设置：
+
+```json
+{
+  "compilerOptions": {
     "experimentalDecorators": true,
-    "emitDecoratorMetadata": true,
-}
-```
-:::
-### 路径引用
-
-
-另外引用modelbase的childType（model）的时候，必须进行直接引用，否则会因为加载顺序问题导致childType（model）无法被读取到。
-
-::: tip 正确的引用方式
-
-```ts
-import { DeviceModel } from '@/device/Device.model'
-// 或
-import { DeviceModel } from './Device.model'
-
-class xx {
-  @Column({ childType: DeviceModel, autowired: true })
-  @Column({ model: DeviceModel, autowired: true })
-}
-```
-:::
-::: caution 错误的方式
-
-```ts
-import { DeviceModel } from '@/device'
-
-class xx {
-  @Column({ childType: DeviceModel, autowired: true })
-  @Column({ model: DeviceModel, autowired: true })
-}
-```
-:::
-### 指定model
-
-::: tip 正确写法（推荐）
-
-`Consumer`需要在`ConsumerList`前面，同时指定了model（childType）。
-```ts
-class Consumer extends ModelBase {
-  @Column()
-  public userName: string
-}
-
-class ConsumerList extends ModelBase {
-  @Column({ model: () => Consumer})
-  public child: Consumer
-}
-```
-:::
-::: warning 正常使用
-
-`Consumer`需要在`ConsumerList`后面了（错误，可以通过eslint去纠正），同时指定了model（childType）。
-```ts
-class ConsumerList extends ModelBase {
-  @Column({ model: Consumer})
-  public child: Consumer
-}
-
-class Consumer extends ModelBase {
-  @Column()
-  public userName: string
-}
-```
-:::
-::: warning 正常使用
-
-`Consumer`在`ConsumerList`前面了，但是没有指定了model（错误）。
-```ts
-class Consumer extends ModelBase {
-  @Column()
-  public userName: string
-}
-
-class ConsumerList extends ModelBase {
-  @Column()
-  public child: Consumer
-}
-```
-:::
-::: caution 错误使用
-
-class定义顺序不对，也没有指定model（别名childType），无法正确new出对象。
-```ts
-class ConsumerList extends ModelBase {
-  @Column()
-  public child: Consumer
-}
-
-class Consumer extends ModelBase {
-  @Column()
-  public userName: string
-}
-```
-:::
-### 关闭define配置
-#### 关闭`useDefineForClassFields`
-::: info 在tsconfig.json关闭配置
-
-```json
-"compilerOptions": {
-    "useDefineForClassFields": false,
-}
-```
-:::
-#### 问题分析
-升级typescript后，`useDefineForClassFields`默认是`true`。
-
-```json
-"compilerOptions": {
-    "useDefineForClassFields": true,
-}
-```
-如果启用 `useDefineForClassFields`，会使用 `Object.defineProperty` 来初始化声明，对于class的继承会出现值undefined的问题。
-下面的例子中
-::: note 代码示例
-通过`new Consumer(dto)`进行实例化。
-```ts
-class ModelBase {
-  constructor(dto： any) {
-    this.userName = dto?.userName;
+    "useDefineForClassFields": false
   }
 }
-
-class Consumer extends ModelBase {
-  public userName: string
-}
 ```
-:::
-::: info 编译结果
-启用`useDefineForClassFields`后的编译结果。
 
-```ts
-"use strict";
-class ModelBase {
-    constructor(dto, any) {
-        this.userName = dto === null || dto === void 0 ? void 0 : dto.userName;
-    }
-}
-class Consumer extends ModelBase {
-    constructor() {
-        // ModelBase的会在Consumer的`super(...arguments)`函数进行初始化复制
-        super(...arguments);
-        // 将userName初始化为'undefined'
-        Object.defineProperty(this, "userName", {
-            enumerable: true,
-            configurable: true,
-            writable: true,
-            value: void 0
-        });
-    }
-}
-```
-:::
+## Vite 项目需要特殊配置吗？
+
+ModelBase 不要求 `emitDecoratorMetadata`，通常可以直接由 Vite 编译。若项目仍使用旧版
+TypeScript 装饰器语法，请确保应用源码和依赖的装饰器编译配置一致。

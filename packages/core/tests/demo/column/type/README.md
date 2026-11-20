@@ -2,40 +2,28 @@
 permalink: /column/type/
 ---
 
-# type 类型
+# 字段类型与运行时转换
 
-## 说明
+[学习路线](/guide/roadmap/) · [示例索引](/guide/examples/) · [API 速查](/guide/reference/)
 
-对象属性字段的类型，声明类型是为了静态代码检查
+## 解决什么问题
 
-## 案例
+区分 TypeScript 类型声明、列配置和数据转换，避免误以为声明 number 就会自动校验输入。
 
-::: tabs
+## 示例与结果
 
-@tab 案例一
+片段来自自动化测试。使用 User、Address、Item 的片段，请先使用[快速上手中的模型定义](/guide/start/)；其他类在片段内定义。所需 core API 从 `@model-base/core` 导入。
 
-### 模型
-
-```ts :no-line-numbers
-<!-- @include: ./init.spec.ts#model -->
+```ts
+<!-- @include: ../../learning/journey.spec.ts#conversion -->
 ```
 
-### 实例初始化
+输出注释由 `learning/journey.spec.ts` 中对应断言验证。各片段独立运行，不依赖上一页的修改状态。
 
-```ts :no-line-numbers
-<!-- @include: ./init.spec.ts#instance -->
-```
+## 使用边界
 
-### 打印日志
+不读取 reflect-metadata。Number/String/Boolean 不是通用强制转换器；需要转换时使用 deserialize。嵌套类型必须显式设置 model。动态工厂的 type 使用字符串定义，详见动态模型章节。
 
-```ts :no-line-numbers
-<!-- @include: ./init.spec.ts#log -->
-```
+## 下一步
 
-:::
-
-## 注意事项
-
-- <span style="color:red">不需要传入，但是要正确的声明</span>，通过 Reflect.getMetadata('design:type', target, property)自动读取
-- 支持的数据类型**Array**、**Object**、**Number**、**String**、**Boolean**、**Map**、**WeakMap**、**Set**、**WeakSet**、**Symbol**、**Function**、**File**、**Any**
-- **Array**、**Object**的特殊用法请参考 [`model`](/column/model/README.md)
+[继续阅读 →](/column/name/) · [返回按任务检索](/guide/examples/)

@@ -1,4 +1,6 @@
 /**
+ * 仅检查非 null 且 typeof 为 object；数组也满足，不包含函数。
+ *
  * Checks if `value` is object-like. A value is object-like if it's not `null`
  * and has a `typeof` result of "object".
  *

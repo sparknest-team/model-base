@@ -2,86 +2,28 @@
 permalink: /column/default/
 ---
 
-# default 默认值
+# default：缺失字段的默认值
 
-## 说明
+[学习路线](/guide/roadmap/) · [示例索引](/guide/examples/) · [API 速查](/guide/reference/)
 
-创建对象时候属性的默认值，基本类型用 `default` ，复杂类型用 `autowired` 或者函数
+## 解决什么问题
 
-## 案例
+DTO 字段缺失或为 undefined 时提供初值，不覆盖显式输入。
 
-::: tabs
+## 示例与结果
 
-@tab 普通类型模型
+片段来自自动化测试。使用 User、Address、Item 的片段，请先使用[快速上手中的模型定义](/guide/start/)；其他类在片段内定义。所需 core API 从 `@model-base/core` 导入。
 
-### 模型
-
-```ts :no-line-numbers
-<!-- @include: ./primitive.spec.ts#model -->
+```ts
+<!-- @include: ../../learning/journey.spec.ts#defaults -->
 ```
 
-### 实例初始化
+输出注释由 `learning/journey.spec.ts` 中对应断言验证。各片段独立运行，不依赖上一页的修改状态。
 
-```ts :no-line-numbers
-<!-- @include: ./primitive.spec.ts#instance -->
-```
+## 使用边界
 
-### 修改实例
+对象和数组使用工厂函数。null 不等于缺失；noDefault: true 跳过默认值。普通对象默认值不自动获得深层追踪能力。
 
-```ts :no-line-numbers
-<!-- @include: ./primitive.spec.ts#change -->
-```
+## 下一步
 
-### 打印日志
-
-```ts :no-line-numbers
-<!-- @include: ./primitive.spec.ts#log -->
-```
-
-@tab 数组和对象模型
-
-### 模型
-
-```ts :no-line-numbers
-<!-- @include: ./obj.spec.ts#model -->
-```
-
-### 实例初始化
-
-```ts :no-line-numbers
-<!-- @include: ./obj.spec.ts#instance -->
-```
-
-### 打印日志
-
-```ts :no-line-numbers
-<!-- @include: ./obj.spec.ts#log -->
-```
-
-@tab 默认值为函数类型
-
-### 模型
-
-```ts :no-line-numbers
-<!-- @include: ./fn.spec.ts#model -->
-```
-
-### 实例初始化
-
-```ts :no-line-numbers
-<!-- @include: ./fn.spec.ts#instance -->
-```
-
-### 打印日志
-
-```ts :no-line-numbers
-<!-- @include: ./fn.spec.ts#log -->
-```
-
-:::
-
-## 注意事项
-
-- `default` 推荐用于普通类型
-- 如果需要给 **Array** 或者 **Object** 进行初始化，请参考 [`autowired`](/column/autowired/README.md)
-- 如果初始化时需要给 **Array** 或者 **Object** 更详细的默认值，请参考<span style="color:red">案例三</span>
+[继续阅读 →](/column/autowired/) · [返回按任务检索](/guide/examples/)

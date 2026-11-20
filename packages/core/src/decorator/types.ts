@@ -75,7 +75,7 @@ export type TSerializableParam = {
   /** 仅序列化指定分组 */
   group?: string
   /** 排除指定分组 */
-  excludeGroup?: string
+  excludeGroup?: string | string[]
   /** 是否去除字符串首尾空格 */
   trim?: boolean
   /** 是否使用驼峰命名 */
@@ -217,8 +217,10 @@ export interface IColumnInner<T = any> extends IColumn<T> {
 export interface IModelProps {
   /** 初始化时是否跳过默认值设置 */
   noDefault?: boolean
-  /** 是否启用数据状态追踪（变更检测） */
+  /** @deprecated 请使用 enableSnapshot。兼容别名；关闭时禁用快照、变更检测和回滚。 */
   enableDataState?: boolean
+  /** 启用快照、变更检测和回滚，默认 true。同一层配置中优先于 enableDataState。 */
+  enableSnapshot?: boolean
   /** 是否保持原始属性名（不进行命名转换） */
   keepModelName?: boolean
   /** 是否从实例值推断列定义 */
@@ -235,15 +237,13 @@ export interface IModelProps {
  * 创建或更新模型实例时的配置参数。
  */
 export interface IModelOptions extends IModelProps {
-  /** 仅对当前模型实例生效的配置（不影响嵌套模型） */
-  current?: IModelProps
   /** 分组标识，用于选择性序列化/反序列化 */
   group?: string
   /** 排除的分组标识 */
   excludeGroup?: string
-  /** 内部标识：是否已完成初始化 */
+  /** 内部标记：true 时跳过基类构造中的映射，由工厂在构造完成后执行。 */
   __isInit?: boolean
-  /** 内部标识：是否跳过反序列化处理 */
+  /** 历史兼容标记；当前映射链路不读取它，不保证跳过反序列化。 */
   __noDeserialize?: boolean
 }
 
@@ -255,16 +255,4 @@ export interface IModelOptions extends IModelProps {
 export interface IDataModel extends IModelProps {
   /** 自定义方法映射 */
   methods?: { [key: string]: any }
-}
-
-/**
- * 模型更新选项
- */
-export interface IModelUpdateOptions {
-  /** 分组标识 */
-  group?: string
-  /** 排除的分组标识 */
-  excludeGroup?: string
-  /** 仅对当前模型实例生效的配置 */
-  current?: IModelProps
 }

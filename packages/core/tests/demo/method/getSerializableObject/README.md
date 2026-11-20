@@ -2,102 +2,28 @@
 permalink: /method/getSerializableObject/
 ---
 
-# getSerializableObject 序列化
+# getSerializableObject：输出普通 DTO
 
-## 说明
+[学习路线](/guide/roadmap/) · [示例索引](/guide/examples/) · [API 速查](/guide/reference/)
 
-将模型实例转换为可序列化的普通对象（DTO），用于提交给后端 API。
+## 解决什么问题
 
-## 方法签名
+根据字段映射、转换和过滤规则输出当前数据，不重置保存点。
 
-```ts
-getSerializableObject(params?: {
-  trim?: boolean           // 是否去除字符串首尾空格
-  group?: string           // 仅包含指定分组
-  excludeGroup?: string    // 排除指定分组
-  clean?: CLEAN_ENUM       // 空值清理策略
-  camelCase?: boolean      // 是否使用驼峰命名
-  enableEmptyValue?: boolean // 是否启用 emptyValue
-}): object
-```
+## 示例与结果
 
-## 参数说明
-
-| 参数 | 类型 | 默认值 | 说明 |
-|-----|------|-------|------|
-| `trim` | `boolean` | `false` | 去除字符串首尾空格 |
-| `group` | `string` | - | 仅序列化指定分组的列 |
-| `excludeGroup` | `string` | - | 排除指定分组的列 |
-| `clean` | `CLEAN_ENUM` | `CLEAN_UNDEFINED_AND_NULL` | 空值清理策略 |
-| `camelCase` | `boolean` | `false` | 输出驼峰命名（默认蛇形） |
-
-## 空值清理策略
+片段来自自动化测试。使用 User、Address、Item 的片段，请先使用[快速上手中的模型定义](/guide/start/)；其他类在片段内定义。所需 core API 从 `@model-base/core` 导入。
 
 ```ts
-import { CLEAN_ENUM } from '@model-base/core'
-
-// 仅清理 undefined
-user.getSerializableObject({ clean: CLEAN_ENUM.CLEAN_UNDEFINED })
-
-// 清理 undefined 和 null（默认）
-user.getSerializableObject({ clean: CLEAN_ENUM.CLEAN_UNDEFINED_AND_NULL })
-
-// 清理所有空值（undefined、null、''、[]、{}）
-user.getCleanSerializableObject()
-// 或
-user.getSerializableObject({ clean: CLEAN_ENUM.CLEAN_DIRTY })
+<!-- @include: ../../learning/journey.spec.ts#create -->
 ```
 
-## 使用示例
+输出注释由 `learning/journey.spec.ts` 中对应断言验证。各片段独立运行，不依赖上一页的修改状态。
 
-```ts
-const user = new User({
-  id: 1,
-  user_name: 'John',
-  email: ''
-})
+## 使用边界
 
-// 默认序列化（蛇形命名）
-user.getSerializableObject()
-// { id: 1, user_name: 'John', email: '' }
+返回普通对象，不保证是任意类型都可 JSON.stringify 的纯 JSON。默认清理 undefined 和 null；camelCase 未传时遵守实例/类命名配置。
 
-// 驼峰命名
-user.getSerializableObject({ camelCase: true })
-// { id: 1, userName: 'John', email: '' }
+## 下一步
 
-// 清理空值
-user.getCleanSerializableObject()
-// { id: 1, user_name: 'John' }
-```
-
-## 案例
-
-::: tabs
-
-@tab 案例一
-
-### 模型
-
-```ts :no-line-numbers
-<!-- @include: ./init.spec.ts#model -->
-```
-
-### 实例初始化
-
-```ts :no-line-numbers
-<!-- @include: ./init.spec.ts#instance -->
-```
-
-### 打印日志
-
-```ts :no-line-numbers
-<!-- @include: ./init.spec.ts#log -->
-```
-
-:::
-
-## 相关方法
-
-- [`getCleanSerializableObject`](/method/getCleanSerializableObject/) - 获取清理后的序列化对象
-- [`getChangedData`](/method/getChangedData/) - 仅获取变更的数据
-- [`getSerializableString`](/method/getSerializableString/) - 获取 JSON 字符串
+[继续阅读 →](/method/getCleanSerializableObject/) · [返回按任务检索](/guide/examples/)

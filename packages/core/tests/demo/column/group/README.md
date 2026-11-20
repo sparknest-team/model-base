@@ -2,71 +2,28 @@
 permalink: /column/group/
 ---
 
-# group 分组
+# group：按场景筛选字段
 
-## 说明
+[学习路线](/guide/roadmap/) · [示例索引](/guide/examples/) · [API 速查](/guide/reference/)
 
-声明当前的 column 属于哪个组，最后通过**getChangedData**、**getSerializableObject**方法来获取对应分组的内容
+## 解决什么问题
 
-## 案例
+给字段设置一个或多个组，创建、输出和变更查询时选择需要的内容。
 
-::: tabs
+## 示例与结果
 
-@tab getChangedData
+片段来自自动化测试。使用 User、Address、Item 的片段，请先使用[快速上手中的模型定义](/guide/start/)；其他类在片段内定义。所需 core API 从 `@model-base/core` 导入。
 
-### 模型
-
-```ts :no-line-numbers
-<!-- @include: ./getChangedData.spec.ts#model -->
+```ts
+<!-- @include: ../../learning/journey.spec.ts#groups -->
 ```
 
-### 实例初始化
+输出注释由 `learning/journey.spec.ts` 中对应断言验证。各片段独立运行，不依赖上一页的修改状态。
 
-```ts :no-line-numbers
-<!-- @include: ./getChangedData.spec.ts#instance -->
-```
+## 使用边界
 
-### 修改实例
+未指定过滤时处理全部字段；指定 group 时保留该组和未分组字段。group 优先于 excludeGroup。新代码应避免用分组保存替代独立的业务保存点。
 
-```ts :no-line-numbers
-<!-- @include: ./getChangedData.spec.ts#change -->
-```
+## 下一步
 
-### 打印日志
-
-```ts :no-line-numbers
-<!-- @include: ./getChangedData.spec.ts#log -->
-```
-
-@tab getSerializableObject
-
-### 模型
-
-```ts :no-line-numbers
-<!-- @include: ./getSerializableObject.spec.ts#model -->
-```
-
-### 实例初始化
-
-```ts :no-line-numbers
-<!-- @include: ./getSerializableObject.spec.ts#instance -->
-```
-
-### 打印日志
-
-```ts :no-line-numbers
-<!-- @include: ./getSerializableObject.spec.ts#log -->
-```
-
-:::
-
-## 注意事项
-
-- **getSerializableObject**
-  - **({ group: 'group1' })** 获得 column 中被标记为“group1”的属性与没有做任何 group 标记的属性的并集
-  - **({ excludeGroup: 'group1' })** 获得 column 中没有被标记为“group1”的所有属性
-  - **()** 获取所有属性
-- **getChangedData**
-  - **({ group: 'group1' })** 获得 column 中被标记为“group1”的属性与没有做任何 group 标记的属性的并集（变化的数据）
-  - **({ excludeGroup: 'group1' })** 获得 column 中没有被标记为“group1”的所有属性（变化的数据）
-  - **()** 获取所有属性（变化的数据）
+[继续阅读 →](/method/getSerializableObject/) · [返回按任务检索](/guide/examples/)

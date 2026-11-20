@@ -15,14 +15,26 @@ const OUT = path.join(root, 'docs/.vuepress/public/llms-full.txt')
 
 /** 按顺序拼接的文档，url 取 VuePress 实际路由
  *  （根目录 README.md 只有 frontmatter 的首页 hero 配置，无正文，故不列入） */
-const PAGES = [
-  { file: 'docs/guide/start.md', url: '/guide/start/' },
-  { file: 'docs/guide/know.md', url: '/guide/know/' },
-  { file: 'docs/guide/why.md', url: '/guide/why/' },
-  { file: 'docs/guide/faq.md', url: '/guide/faq/' },
-  { file: 'docs/guide/migarate.md', url: '/guide/migrate/' },
-  { file: 'docs/guide/changelog.md', url: '/guide/changelog/' },
-]
+const guideDir = path.join(root, 'docs/guide')
+const PAGES = fs.readdirSync(guideDir).filter(name => name.endsWith('.md')).sort().map(name => {
+  const file = path.join('docs/guide', name)
+  const source = fs.readFileSync(path.join(root, file), 'utf8')
+  const url = source.match(/^permalink:\s*(\S+)$/m)?.[1]
+  if (!url) throw new Error('Missing permalink in ' + file)
+  return { file, url }
+})
+
+function expandExamples(source, file) {
+  return source.replace(/<!--\s*@include:\s*([^#\s]+)(?:#([\w-]+))?\s*-->/g, (_, target, region) => {
+    const code = fs.readFileSync(path.resolve(path.dirname(file), target), 'utf8')
+    if (!region) return code.trimEnd()
+    const lines = code.split('\n')
+    const start = lines.findIndex(line => line.trim() === '// region ' + region)
+    const end = lines.findIndex((line, index) => index > start && line.trim() === '// endregion ' + region)
+    if (start < 0 || end < 0) throw new Error('Missing region ' + target + '#' + region)
+    return lines.slice(start + 1, end).join('\n')
+  })
+}
 
 /** 去掉 VuePress 语法，转成 LLM 友好的纯文本 Markdown */
 function normalize(md) {
@@ -74,7 +86,7 @@ function normalize(md) {
   return out.join('\n').replace(/\n{3,}/g, '\n\n').trim()
 }
 
-const parts = []
+const parts = [fs.readFileSync(path.join(root, 'scripts/modelbase-ai-guide.txt'), 'utf8').trim()]
 let pageCount = 0
 
 for (const page of PAGES) {
@@ -83,7 +95,7 @@ for (const page of PAGES) {
     console.warn(`[llms] 跳过不存在的文件：${page.file}`)
     continue
   }
-  const body = normalize(fs.readFileSync(abs, 'utf-8'))
+  const body = normalize(expandExamples(fs.readFileSync(abs, 'utf-8'), abs))
   if (!body) continue
   parts.push(`<!-- source: ${SITE}${page.url} -->\n${body}`)
   pageCount += 1
@@ -94,7 +106,7 @@ const header = [
   '',
   `> 本文件由 \`yarn docs:llms\` 从 https://modelbase.wiki 的源码文档自动生成，共 ${pageCount} 个页面。`,
   '> 分节索引与速查表见 https://modelbase.wiki/llms.txt 。',
-  '> 包：@model-base/core / @model-base/common / @model-base/service；仓库：https://github.com/loca-spirit/model-base',
+  '> 包：@model-base/core / @model-base/common / @model-base/service；仓库：https://github.com/sparknest-team/model-base',
   '',
   '---',
   '',

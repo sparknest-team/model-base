@@ -2,36 +2,28 @@
 permalink: /method/setColumnData/
 ---
 
-# setColumnData 设置字段元数据
+# setColumnData：按实例属性名赋值
 
-## 说明
+[学习路线](/guide/roadmap/) · [示例索引](/guide/examples/) · [API 速查](/guide/reference/)
 
-### 作用
+## 解决什么问题
 
-一般用于遍历设置列数据，避免出现类型检查的错误提示
+根据字符串属性名赋值，保持当前实例引用并支持链式调用。
 
-## 案例
+## 示例与结果
 
-::: tabs
+片段来自自动化测试。使用 User、Address、Item 的片段，请先使用[快速上手中的模型定义](/guide/start/)；其他类在片段内定义。所需 core API 从 `@model-base/core` 导入。
 
-@tab 案例一
-
-### 模型
-
-```ts :no-line-numbers
-<!-- @include: ./init.spec.ts#model -->
+```ts
+<!-- @include: ../../learning/journey.spec.ts#access -->
 ```
 
-### 实例初始化
+输出注释由 `learning/journey.spec.ts` 中对应断言验证。各片段独立运行，不依赖上一页的修改状态。
 
-```ts :no-line-numbers
-<!-- @include: ./init.spec.ts#instance -->
-```
+## 使用边界
 
-### 打印日志
+等价于实例属性赋值，不校验字段、不注册 Column。静态模型里未声明的属性不会因本方法而自动参与输出。columnsInValue 是例外。
 
-```ts :no-line-numbers
-<!-- @include: ./init.spec.ts#log -->
-```
+## 下一步
 
-:::
+[继续阅读 →](/guide/dynamic/) · [返回按任务检索](/guide/examples/)

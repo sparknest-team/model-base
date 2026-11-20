@@ -2,39 +2,28 @@
 permalink: /column/aliasName/
 ---
 
-# aliasName 入参别名
+# aliasName：兼容额外输入名
 
-## 说明
+[学习路线](/guide/roadmap/) · [示例索引](/guide/examples/) · [API 速查](/guide/reference/)
 
-设置`入参`数据的属性别名。
+## 解决什么问题
 
-## 案例
+同一个业务字段需要接收接口的另一个名称时使用 aliasName。
 
-::: tabs
+## 示例与结果
 
-@tab 案例一
+片段来自自动化测试。使用 User、Address、Item 的片段，请先使用[快速上手中的模型定义](/guide/start/)；其他类在片段内定义。所需 core API 从 `@model-base/core` 导入。
 
-### 模型
-
-```ts :no-line-numbers
-<!-- @include: ./Consumer.ts#model -->
+```ts
+<!-- @include: ../../learning/journey.spec.ts#names -->
 ```
 
-### 实例初始化
+输出注释由 `learning/journey.spec.ts` 中对应断言验证。各片段独立运行，不依赖上一页的修改状态。
 
-```ts :no-line-numbers
-<!-- @include: ./init.spec.ts#consumer -->
-```
+## 使用边界
 
-### 打印日志
+不要把 aliasName 理解成输出重命名。严格别名使用 strictAliasNameCheck；多个名称同时出现时，应通过业务测试确认选择顺序，不依赖模糊输入。
 
-```ts :no-line-numbers
-<!-- @include: ./init.spec.ts#log -->
-```
+## 下一步
 
-:::
-
-## 注意事项
-
-- 需要把后端给的字段名作为 `aliasName` 的属性值，而不是把自定义字段名作为属性值
-- 使用 `aliasName` 当我们数据给后端时也使用自定义的字段名，如果需要在接受后端数据和输出后端数据时字段名保持一致，请参考 [`name`](/column/name/README.md)
+[继续阅读 →](/column/default/) · [返回按任务检索](/guide/examples/)

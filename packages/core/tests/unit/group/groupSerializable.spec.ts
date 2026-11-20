@@ -51,5 +51,14 @@ describe('Group getSerializableObject', () => {
         empty_group: '1',
       })
     })
+    it('group takes priority over excludeGroup', () => {
+      const c = new GroupData({ data1: '1', data3: '3', data4: '4', emptyGroup: 'empty' })
+
+      expect(c.getSerializableObject({ group: 'group1', excludeGroup: 'group1' })).toEqual({
+        data1: '1',
+        data3: '3',
+        empty_group: 'empty',
+      })
+    })
   })
 })

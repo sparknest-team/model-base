@@ -36,28 +36,8 @@ curl -s https://modelbase.wiki/llms-full.txt       # 全量文档
 使用 @model-base/core 前先读 https://modelbase.wiki/llms.txt
 ```
 
-## 内容说明
+## 内容与生成方式
 
-`llms.txt` 是**人工维护**的，覆盖写代码真正要知道的东西：
+精简版列出主题入口。完整版合并 AI 开发指南、各指南页及其引用的示例代码，包含版本变更和迁移说明。
 
-- 安装与 tsconfig 必配项（`experimentalDecorators` / `emitDecoratorMetadata` / `useDefineForClassFields: false` / `target: es5`）
-- Vite 项目的装饰器元数据绕行方案
-- `@Column` 全量选项（`primary` / `model` / `childType` / `default` / `emptyValue` / `serialize` / `deserialize` / `group` …）
-- `@DataModel` 选项
-- 序列化语义：三种 `CLEAN_ENUM` 的差别、`enableEmptyValue` 何时生效、命名策略默认值
-- 实例方法 / 静态方法 / 工具函数清单
-- 6 条常见坑（含「空字符串会被提交」「嵌套模型不能从 barrel 引入」）
-
-`llms-full.txt` 是**自动生成**的，内容与上面各文档页严格一致，不会出现文档改了而 LLM 版本没跟上的情况。
-
-## 谁来生成
-
-```bash
-yarn docs:llms      # 只重新生成 llms-full.txt
-yarn build:doc      # 构建文档站（已自动前置 docs:llms）
-```
-
-- 手写部分：`docs/.vuepress/public/llms.txt`（改 API 行为时同步改这里）
-- 生成脚本：`scripts/gen-llms.mjs`（把 `docs/guide/*.md` 去掉 VuePress 语法后拼接）
-- 两份文件都放在 `docs/.vuepress/public/` 下（VuePress 2 的静态资源目录），构建时原样复制到站点根目录，
-  所以线上路径就是 `/llms.txt` 和 `/llms-full.txt`
+运行 `yarn docs:llms` 可重新生成完整版。`yarn build:doc` 在构建站点前执行相同的生成步骤。

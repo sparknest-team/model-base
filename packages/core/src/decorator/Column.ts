@@ -8,7 +8,8 @@
 import { cloneDeep } from 'lodash'
 import { camelToSnake, snakeToCamel } from '../_utils/columnName'
 import { getModelProps } from '../_utils/ModelBaseProps'
-import { __COLUMNS__ } from '../constant'
+import { __COLUMNS_CACHED__ } from '../constant'
+import { ownColumnMetadata, registerColumn } from '../_utils/columnRegistry'
 import { IColumn, IColumnInner } from './types'
 
 /**
@@ -69,11 +70,12 @@ export function generateColumnsFromData<T>(model: any, data: any) {
   return columns_
 }
 
+/** 将声明选项归一化为内部列定义：解析名称/别名、统一 group 数组，并保留 childType 优先级。 */
 function initColumn<T>(target: any, property_: string | symbol, columns_: any, params?: IColumnInner<T>) {
   let params_ = cloneDeep(params || {}) as IColumnInner<T>
   let property = property_
   if (typeof property_ === 'symbol') {
-    // symbol是可以作为属性key的
+    // 沿用旧规则：Symbol 在元数据中转为字符串键，并非保留 Symbol 本身的身份。
     property = property_.toString()
   }
 
@@ -113,7 +115,7 @@ function initColumn<T>(target: any, property_: string | symbol, columns_: any, p
     }
   }
 
-  // const designType = Reflect.getMetadata('design:type', target, property)
+  // 不读取 reflect-metadata；子模型类型必须由 model/childType 显式提供。
   if (params?.type === 'array') {
     params_.type = Array
   }
@@ -148,6 +150,7 @@ function initColumn<T>(target: any, property_: string | symbol, columns_: any, p
   return columns
 }
 
+/** 本地装饰器上下文类型，描述实际使用的字段装饰器契约，不提供运行时反射。 */
 interface ClassFieldDecoratorContext<This = unknown, Value = unknown> {
   /** The kind of class element that was decorated. */
   readonly kind: 'field'
@@ -185,6 +188,7 @@ interface ClassFieldDecoratorContext<This = unknown, Value = unknown> {
    */
   addInitializer(initializer: (this: This) => void): void
 
+  /** 当前类的装饰器元数据对象，通过 Symbol.metadata 交给模型读取。 */
   readonly metadata: DecoratorMetadata
 }
 
@@ -197,18 +201,9 @@ declare type PropertyDecoratorOld = (target: any, propertyKey: string | symbol) 
  * 标记模型属性并配置其序列化/反序列化行为。
  * 支持 TypeScript 5.0+ 新版装饰器和旧版实验性装饰器。
  *
- * TypeScript 类型映射：
- * - number → Number
- * - string → String
- * - boolean → Boolean
- * - any → Object
- * - void → undefined
- * - Array → Array
- * - Tuple → Array
- * - class → 类构造函数
- * - Enum → Number
- * - 有调用签名 → Function
- * - 其他（含 interface）→ Object
+ * 不从 TypeScript 类型注解推断运行时构造器，不依赖 emitDecoratorMetadata。
+ * 嵌套类型通过 model/childType 声明；type: 'array' 会归一化为 Array。
+ * 仅生成列元数据，不安装属性 getter/setter，也不立即转换字段值。
  *
  * @param col - 列配置选项
  * @returns 属性装饰器
@@ -239,18 +234,22 @@ export function Column(col?: IColumn): PropertyDecorator {
     if (target?.constructor) {
       // 旧版装饰器语法（experimentalDecorators）
       const property = context as string | symbol
-      const metadata = (target.constructor as any)[Symbol.metadata] || {}
-      const columns = metadata[__COLUMNS__] || {}
-      // 继承关系时需要深拷贝，避免污染父类的 columns
-      metadata[__COLUMNS__] = initColumn(target, property, cloneDeep(columns), params)
+      const constructor = target.constructor as any
+      const metadata = ownColumnMetadata(constructor)
+      const columns = initColumn(target, property, {}, params)
+      const key = typeof property === 'symbol' ? property.toString() : property
+      registerColumn(metadata, key, columns[key])
+      delete constructor[__COLUMNS_CACHED__]
       ;(target.constructor as any)[Symbol.metadata] = metadata
     } else {
       // 新版装饰器语法（TypeScript 5.0+）
       const property = (context as ClassFieldDecoratorContext<typeof target, any>).name
       const metadata = (context as any).metadata || {}
-      const columns = metadata[__COLUMNS__] || {}
-      metadata[__COLUMNS__] = initColumn(metadata, property, cloneDeep(columns), params)
+      const columns = initColumn(metadata, property, {}, params)
+      const key = typeof property === 'symbol' ? property.toString() : property
+      registerColumn(metadata, key, columns[key])
       ;(context as any).metadata = metadata
+      // 保留基类构造期间已映射的字段，避免新版装饰器的字段初始化再次覆盖它。
       return function (this: any, value: any) {
         return this[property]
       }
@@ -270,10 +269,12 @@ export function Column(col?: IColumn): PropertyDecorator {
 export function ColumnDefine<T>(col?: IColumn<T>): PropertyDecoratorOld {
   return (target: any, property: string | symbol) => {
     const params = col as IColumnInner<T>
-    const metadata = (target.constructor as any)[Symbol.metadata] || {}
-    const columns = metadata[__COLUMNS__] || {}
-    const columns_ = initColumn<T>(target, property, columns, params)
-    metadata[__COLUMNS__] = columns_
+    const constructor = target.constructor as any
+    const metadata = ownColumnMetadata(constructor)
+    const columns = initColumn<T>(target, property, {}, params)
+    const key = typeof property === 'symbol' ? property.toString() : property
+    registerColumn(metadata, key, columns[key])
+    delete constructor[__COLUMNS_CACHED__]
     ;(target.constructor as any)[Symbol.metadata] = metadata
   }
 }

@@ -1,7 +1,7 @@
 /**
- * 生成符合 RFC4122 v4 标准的 UUID
+ * 生成带 v4 版本位的 UUID 格式字符串
  *
- * 结合时间戳和随机数生成唯一标识符，支持高精度计时器以提高唯一性。
+ * 结合时间戳与 Math.random；不保证无碰撞，也不是密码学安全随机数，不用于认证令牌。
  *
  * @returns 格式为 xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx 的 UUID 字符串
  *

@@ -2,84 +2,28 @@
 permalink: /column/model/
 ---
 
-# model 模型
+# model：声明嵌套模型
 
-## 说明
+[学习路线](/guide/roadmap/) · [示例索引](/guide/examples/) · [API 速查](/guide/reference/)
 
-递归生成复杂对象的时候所需要，非必传，但是 **Array** 和 **Object** 需要传入 `model`
+## 解决什么问题
 
-## 案例
+将对象或数组递归创建为子模型，并让受支持的子字段参与变更追踪。
 
-::: tabs
+## 示例与结果
 
-@tab 数组模型
+片段来自自动化测试。使用 User、Address、Item 的片段，请先使用[快速上手中的模型定义](/guide/start/)；其他类在片段内定义。所需 core API 从 `@model-base/core` 导入。
 
-模型
-
-```ts :no-line-numbers
-<!-- @include: ./arr.spec.ts#model -->
+```ts
+<!-- @include: ../../learning/journey.spec.ts#nested -->
 ```
 
-实例初始化
+输出注释由 `learning/journey.spec.ts` 中对应断言验证。各片段独立运行，不依赖上一页的修改状态。
 
-```ts :no-line-numbers
-<!-- @include: ./arr.spec.ts#instance -->
-```
+## 使用边界
 
-打印日志
+可传类或 () => 类。惰性类型引用不是循环对象图支持。未声明 model/childType 的对象是普通数据，不保证其内部变更能自动检测与还原。
 
-```ts :no-line-numbers
-<!-- @include: ./arr.spec.ts#log -->
-```
+## 下一步
 
-@tab 对象模型
-
-### 模型
-
-```ts :no-line-numbers
-<!-- @include: ./obj.spec.ts#model -->
-```
-
-### 实例初始化
-
-```ts :no-line-numbers
-<!-- @include: ./obj.spec.ts#instance -->
-```
-
-### 打印日志
-
-```ts :no-line-numbers
-<!-- @include: ./obj.spec.ts#log -->
-```
-
-@tab 未传 model
-
-### 模型
-
-```ts :no-line-numbers
-<!-- @include: ./diff.spec.ts#model -->
-```
-
-### 实例初始化
-
-```ts :no-line-numbers
-<!-- @include: ./diff.spec.ts#instance -->
-```
-
-### 打印日志
-
-```ts :no-line-numbers
-<!-- @include: ./diff.spec.ts#log -->
-```
-
-:::
-
-## 注意事项
-
-- 普通类型无需传入 `model` ,只有 **Array** 和 **Object** 需要传入 `model`
-- 若没有传入 `model` 字段
-  - 不可以调用 **ModelBase** 原型的所有方法
-  - 对于 **Array** 来说，字段为下划线命名
-  - 对于 **Object** 来说
-    - 如果内层类型在外层类型上面定义，会转换为驼峰命名
-    - 若在下面定义，则为下划线命名
+[继续阅读 →](/guide/nested/) · [返回按任务检索](/guide/examples/)

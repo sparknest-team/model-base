@@ -5,7 +5,7 @@
  * 通过 Symbol.metadata 或直接属性访问这些数据。
  */
 
-/** 用于存储模型实例原始数据快照的 WeakMap 键名，支持变更追踪和还原功能 */
+/** 构造器上快照 WeakMap 的属性名；表内只放 DTO，未物化的节点日志存于内部追踪状态。 */
 export const __CLONE__ = '__CLONE__'
 
 /** 用于存储 @DataModel 装饰器配置信息的键名 */
