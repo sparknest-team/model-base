@@ -14,6 +14,10 @@ export const zhNavBar: NavbarOptions = [
     link: '/guide/reference/',
   },
   {
+    text: 'LLM 文档',
+    link: '/guide/llm/',
+  },
+  {
     text: 'service',
     link: '/guide/service/',
   },

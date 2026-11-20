@@ -26,6 +26,7 @@ export const zhSideBar: SidebarOptions = {
     {
       text: '03 · 模型定义参考',
       children: [
+        { text: 'LLM 文档', link: '/guide/llm/' },
         { text: 'API 速查', link: '/guide/reference/' },
         { text: '模型初始化', link: '/init/' },
         { text: '字段类型', link: '/column/type/' },
