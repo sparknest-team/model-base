@@ -19,12 +19,13 @@ function createApi(overrides: Record<string, jest.Mock> = {}) {
     del: jest.fn(),
     put: jest.fn(),
     patch: jest.fn(),
+    jsonp: jest.fn(),
     ...overrides,
   }
 }
 
 function createService(api: ReturnType<typeof createApi>) {
-  return new CoreService(new Driver({ api: api as any, url: '/api' }), ServiceResponse)
+  return new CoreService<ServiceResponse, ServiceResponse>(new Driver({ api, url: '/api' }), ServiceResponse)
 }
 
 describe('CoreService', () => {
@@ -125,17 +126,19 @@ describe('CoreService', () => {
     expect(response.serviceError).toBeUndefined()
   })
 
-  it('turns an unexpected driver error into a service_error response', async () => {
+  it.each(['throw', 'reject'])('turns an unexpected driver %s into a service_error response', async mode => {
     const error = new Error('network down')
-    const api = createApi({ get: jest.fn().mockRejectedValue(error) })
+    const api = createApi({ get: mode === 'throw' ? jest.fn(() => { throw error }) : jest.fn().mockRejectedValue(error) })
     const service = createService(api)
     const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined)
 
     try {
       const response = await service.get('/users')
 
+      expect(response).toBeInstanceOf(ServiceResponse)
       expect(response.resultCode).toBe('service_error')
       expect(response.serviceError).toBe(error)
+      expect(errorSpy).toHaveBeenCalledTimes(1)
       expect(errorSpy).toHaveBeenCalledWith('service_error', error)
     } finally {
       errorSpy.mockRestore()
@@ -149,11 +152,17 @@ describe('CoreService', () => {
     )
 
     expect(response.data).toHaveLength(1)
-    expect(response.data[0]).toBeInstanceOf(User)
-    expect(response.data[0].displayName).toBe('Ada')
+    expect(response.data![0]).toBeInstanceOf(User)
+    expect(response.data![0].displayName).toBe('Ada')
   })
 
-  // CoreService currently inserts an empty object before p.wrapper when calling
-  // ServiceResponse.create, so this regression test should be enabled with the fix.
-  it.todo('forwards a response wrapper through the successful request path')
+  it('forwards a response wrapper through the successful request path', async () => {
+    const api = createApi({ get: jest.fn().mockResolvedValue({ result_code: 'success', data: [{ id: 1, display_name: 'Ada' }] }) })
+    const response = await createService(api).get('/users', { wrapper: new ArrayWrapper<User>({ model: User }) })
+    expect(response.isValid()).toBe(true)
+    expect(response.serviceError).toBeUndefined()
+    expect(response.data).toHaveLength(1)
+    expect(response.data![0]).toBeInstanceOf(User)
+    expect(response.data![0].displayName).toBe('Ada')
+  })
 })

@@ -2,56 +2,28 @@
 permalink: /method/getChangedDescriptor/
 ---
 
-# getChangeDescriptor 获取变化的普通对象数据描述
+# getChangedDescriptor：字段与数组变化说明
 
-## 说明
+[学习路线](/guide/roadmap/) · [示例索引](/guide/examples/) · [API 速查](/guide/reference/)
 
-与 **Column** 装饰器的 `primary` 搭配使用
+## 解决什么问题
 
-### getChangedDescriptor()的输出格式
+描述字段的 CREATE、UPDATE、DELETE，以及有主键模型数组的元素分类。
 
-- **key**（实例化属性的 key）
-  - **dataKey**
-    - 变化属性的 output 流向数据的 key
-  - **currentValue**
-    - 最新值
-  - **oldValue**
-    - 旧值
-  - **changeDescriptor**
-    - 变化的数据的描述，包括 create、update、delete
-  - **action**
-    - UPDATE、CREATE、DELETE
+## 示例与结果
 
-## 案例
+片段来自自动化测试。使用 User、Address、Item 的片段，请先使用[快速上手中的模型定义](/guide/start/)；其他类在片段内定义。所需 core API 从 `@model-base/core` 导入。
 
-::: tabs
-
-@tab 案例一
-
-### 模型
-
-```ts :no-line-numbers
-<!-- @include: ./init.ts#model -->
+```ts
+<!-- @include: ../../learning/journey.spec.ts#arrays -->
 ```
 
-### 实例初始化
+输出注释由 `learning/journey.spec.ts` 中对应断言验证。各片段独立运行，不依赖上一页的修改状态。
 
-```ts :no-line-numbers
-<!-- @include: ./init.ts#instance -->
-```
+## 使用边界
 
-### 修改实例
+字段结果使用实例属性名作 key，dataKey 是 DTO 名称。primaryChangeDescriptor 包含 create/delete/update/noChange；未变化的数组也可能有 noChange，不能只凭结果非空判断模型变更。
 
-```ts :no-line-numbers
-<!-- @include: ./init.ts#change -->
-```
+## 下一步
 
-### 打印日志
-
-```ts :no-line-numbers
-<!-- @include: ./init.ts#log -->
-```
-
-:::
-
-![本地图片](./image.png)
+[继续阅读 →](/method/isChanged/) · [返回按任务检索](/guide/examples/)

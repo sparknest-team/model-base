@@ -9,7 +9,7 @@ export default defineUserConfig({
   description: '面向 TypeScript 应用的数据模型、序列化与变更追踪工具',
   // base: (process.env.FX_BASE || '/') as any,
   base: '/' as any,
-  port: 8080,
+  port: 23187,
   theme: hopeTheme,
   plugins: [codeBlockPlugin],
   pagePatterns: [

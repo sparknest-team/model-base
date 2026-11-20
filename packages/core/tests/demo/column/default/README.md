@@ -2,61 +2,28 @@
 permalink: /column/default/
 ---
 
-# 字段默认值
+# default：缺失字段的默认值
 
-当 DTO 中不存在对应字段时，`default` 为模型属性提供初始值。DTO 明确传入的值优先于默认值。
+[学习路线](/guide/roadmap/) · [示例索引](/guide/examples/) · [API 速查](/guide/reference/)
 
-```ts
-class Task extends ModelBase {
-  @Column({ default: false })
-  completed?: boolean
+## 解决什么问题
 
-  @Column({ default: () => [] })
-  tags?: string[]
-}
-```
+DTO 字段缺失或为 undefined 时提供初值，不覆盖显式输入。
 
-对象和数组应使用工厂函数，确保不同实例不会共享同一个可变对象：
+## 示例与结果
+
+片段来自自动化测试。使用 User、Address、Item 的片段，请先使用[快速上手中的模型定义](/guide/start/)；其他类在片段内定义。所需 core API 从 `@model-base/core` 导入。
 
 ```ts
-@Column({ default: () => ({}) })
-metadata?: Record<string, unknown>
+<!-- @include: ../../learning/journey.spec.ts#defaults -->
 ```
 
-传入 `{ noDefault: true }` 可以在本次初始化中跳过所有默认值。
+输出注释由 `learning/journey.spec.ts` 中对应断言验证。各片段独立运行，不依赖上一页的修改状态。
 
-## 可运行示例
+## 使用边界
 
-::: tabs
+对象和数组使用工厂函数。null 不等于缺失；noDefault: true 跳过默认值。普通对象默认值不自动获得深层追踪能力。
 
-@tab 基础类型
+## 下一步
 
-```ts :no-line-numbers
-<!-- @include: ./primitive.spec.ts#model -->
-```
-
-```ts :no-line-numbers
-<!-- @include: ./primitive.spec.ts#instance -->
-```
-
-@tab 对象与数组
-
-```ts :no-line-numbers
-<!-- @include: ./obj.spec.ts#model -->
-```
-
-```ts :no-line-numbers
-<!-- @include: ./obj.spec.ts#instance -->
-```
-
-@tab 动态默认值
-
-```ts :no-line-numbers
-<!-- @include: ./fn.spec.ts#model -->
-```
-
-```ts :no-line-numbers
-<!-- @include: ./fn.spec.ts#instance -->
-```
-
-:::
+[继续阅读 →](/column/autowired/) · [返回按任务检索](/guide/examples/)

@@ -4,65 +4,26 @@ permalink: /init/
 
 # 创建模型实例
 
-模型初始化负责把 DTO 字段映射到类属性、创建嵌套模型、应用默认值，并按需保存变更追踪快照。
+[学习路线](/guide/roadmap/) · [示例索引](/guide/examples/) · [API 速查](/guide/reference/)
 
-## 推荐写法
+## 解决什么问题
 
-```ts
-class User extends ModelBase {
-  @Column()
-  id?: number
+把 DTO 转换为模型属性、应用默认值并创建子模型。推荐使用 `Model.create(dto, options)`。
 
-  @Column()
-  displayName?: string
-}
+## 示例与结果
 
-const user = User.create({
-  id: 1,
-  display_name: 'Ada',
-})
-```
-
-默认反序列化策略为 `mix`，因此同时接受 `display_name` 和 `displayName`。
-
-## 创建方式
-
-| 写法 | 适用场景 |
-|---|---|
-| `User.create(dto, options?)` | 推荐的统一入口 |
-| `new User(dto, options?)` | 简单场景或已有构造函数调用 |
-| `createModel(User, dto, options?)` | 模型类型由参数传入的通用代码 |
-| `deserialize(User, dto, options?)` | 强调 DTO 反序列化语义的工具函数 |
-
-## 初始化选项
+片段来自自动化测试。使用 User、Address、Item 的片段，请先使用[快速上手中的模型定义](/guide/start/)；其他类在片段内定义。所需 core API 从 `@model-base/core` 导入。
 
 ```ts
-const user = User.create(dto, {
-  noDefault: true,
-  enableDataState: false,
-  deserializeNamingStrategies: 'mix',
-  serializeNamingStrategies: 'snakeCase',
-  group: 'detail',
-})
+<!-- @include: ../learning/journey.spec.ts#create -->
 ```
 
-| 选项 | 说明 |
-|---|---|
-| `noDefault` | 缺少字段时不应用 `default` 或 `autowired` |
-| `enableDataState` | 是否生成原始快照并启用变更追踪 |
-| `deserializeNamingStrategies` | DTO 输入字段的命名策略 |
-| `serializeNamingStrategies` | 后续序列化使用的命名策略 |
-| `group` | 只初始化未分组字段和指定分组字段 |
-| `excludeGroup` | 排除指定分组；与 `group` 同时存在时后者优先 |
+输出注释由 `learning/journey.spec.ts` 中对应断言验证。各片段独立运行，不依赖上一页的修改状态。
 
-这些选项只影响本次创建的模型树和对应实例，不会修改全局配置或其他实例。
+## 使用边界
 
-## 可运行示例
+`new` 也支持，但类字段初始化顺序取决于编译方式。默认值写在 Column.default；`noDefault`、`enableSnapshot` 等选项只作用于本次创建，不修改全局。
 
-```ts :no-line-numbers
-<!-- @include: ./init.spec.ts#model -->
-```
+## 下一步
 
-```ts :no-line-numbers
-<!-- @include: ./init.spec.ts#instance -->
-```
+[继续阅读 →](/guide/mapping/) · [返回按任务检索](/guide/examples/)

@@ -2,7 +2,7 @@
  * 对象路径操作工具
  *
  * 提供通过点分隔路径字符串访问和修改嵌套对象属性的功能。
- * 支持数组索引语法（如 'items[0].name'）。
+ * 只有 getPropByPath 解析方括号；getValueByPath/setValueByPath 只按点拆分路径。
  */
 
 /**
@@ -55,12 +55,12 @@ export function getPropByPath(obj: any, path: string, strict: boolean) {
  *
  * @param object - 源对象
  * @param prop - 属性路径
- * @returns 路径对应的值，不存在则返回 null
+ * @returns 中间节点不可继续遍历时返回 null；末级键不存在时可能返回 undefined
  *
  * @example
  * const data = { user: { name: 'John' } }
  * getValueByPath(data, 'user.name') // 'John'
- * getValueByPath(data, 'user.age') // null
+ * getValueByPath(data, 'user.age') // undefined
  */
 export function getValueByPath(object: any, prop: string) {
   prop = prop || ''
@@ -84,7 +84,7 @@ export function getValueByPath(object: any, prop: string) {
 }
 
 /**
- * 通过路径设置值
+ * 通过点分隔路径设置值；不创建缺失的中间对象，中间值为假值时停止写入。
  *
  * @param object - 源对象
  * @param prop - 属性路径

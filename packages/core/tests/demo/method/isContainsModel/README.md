@@ -2,98 +2,28 @@
 permalink: /method/isContainsModel/
 ---
 
-# isContainsModel 是否包含其他模型
+# isContainsModel：兼容的包含关系比较
 
-## 说明
+[学习路线](/guide/roadmap/) · [示例索引](/guide/examples/) · [API 速查](/guide/reference/)
 
-### isContainsModel 的参数
+## 解决什么问题
 
-**isModelEqual(targetData: ModelBase, params?: { ignoreEmptyString?: boolean })**
+逐字段判断目标数据是否满足当前模型的旧式比较规则。
 
-- **targeData**：比较的目标对象。
-- **params**：可选
-  - **ignoreEmptyString**：如果设置 true 并且当前值和目标值存在 undefined 的情况下，会视为''和 undefined 为相等。
+## 示例与结果
 
-### 遍历范围
+片段来自自动化测试。使用 User、Address、Item 的片段，请先使用[快速上手中的模型定义](/guide/start/)；其他类在片段内定义。所需 core API 从 `@model-base/core` 导入。
 
-当前对象通过 **@Column** 声明的字段
-
-### 算法说明
-
-比较两个对象是否是包含关系，算法说明：
-
-- 如果目标值为 undefined，则认为是包含关系。
-- 如果目标值不为 undefined，但是和原来的值不相等，则认为是不包含（一般常见于同一个模型的不同实例）
-
-### 使用场景
-
-远程配置页面下发配置后，判断服务端返回的数据是否符合期待，如果返回的值和其他的值不一样，肯定是一个不包含行为。
-
-## 案例
-
-::: tabs
-
-@tab 案例一
-包含模型
-
-### 模型
-
-```ts :no-line-numbers
-<!-- @include: ./init.spec.ts#model -->
+```ts
+<!-- @include: ../../learning/journey.spec.ts#comparison -->
 ```
 
-### 实例初始化
+输出注释由 `learning/journey.spec.ts` 中对应断言验证。各片段独立运行，不依赖上一页的修改状态。
 
-```ts :no-line-numbers
-<!-- @include: ./init.spec.ts#instance -->
-```
+## 使用边界
 
-### 打印日志
+目标字段为 undefined 的分支具有特殊包含语义。不要将其作为通用子集算法、权限判断或结构校验；命名与嵌套对象也存在兼容边界。
 
-```ts :no-line-numbers
-<!-- @include: ./init.spec.ts#log -->
-```
+## 下一步
 
-@tab 案例二
-如果目标值为 undefined，则认为是包含关系。
-
-### 模型
-
-```ts :no-line-numbers
-<!-- @include: ./undefined.spec.ts#model -->
-```
-
-### 实例初始化
-
-```ts :no-line-numbers
-<!-- @include: ./undefined.spec.ts#instance -->
-```
-
-### 打印日志
-
-```ts :no-line-numbers
-<!-- @include: ./undefined.spec.ts#log -->
-```
-
-@tab 案例三
-如果目标值不为 undefined，但是和原来的值不相等，则认为是不包含（一般常见于同一个模型的不同实例）
-
-### 模型
-
-```ts :no-line-numbers
-<!-- @include: ./equal.spec.ts#model -->
-```
-
-### 实例初始化
-
-```ts :no-line-numbers
-<!-- @include: ./equal.spec.ts#instance -->
-```
-
-### 打印日志
-
-```ts :no-line-numbers
-<!-- @include: ./equal.spec.ts#log -->
-```
-
-:::
+[继续阅读 →](/guide/reference/) · [返回按任务检索](/guide/examples/)

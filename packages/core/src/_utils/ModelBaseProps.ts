@@ -22,8 +22,10 @@ export class ModelOptions implements IModelOptions {
   /** 是否跳过默认值设置 */
   noDefault?: boolean
 
-  /** 是否启用数据状态追踪（变更检测） */
+  /** @deprecated enableSnapshot 的兼容别名 */
   enableDataState?: boolean
+  /** 是否启用快照、变更检测和回滚 */
+  enableSnapshot?: boolean
 
   /** 是否保持原始属性名（不进行命名转换） */
   keepModelName?: boolean
@@ -43,16 +45,17 @@ export class ModelOptions implements IModelOptions {
   /** 排除的分组标识 */
   excludeGroup?: string
 
-  /** 内部标识：是否已完成初始化 */
+  /** 内部标记：由工厂在构造完成后映射 DTO，基类构造阶段跳过。 */
   __isInit?: boolean
 
-  /** 内部标识：是否跳过反序列化处理 */
+  /** 历史兼容标记；当前映射链路不读取它。 */
   __noDeserialize?: boolean
 
   constructor(options?: IModelOptions) {
     if (options) {
       this.noDefault = options.noDefault
       this.enableDataState = options.enableDataState
+      this.enableSnapshot = options.enableSnapshot
       this.keepModelName = options.keepModelName
       this.columnsInValue = options.columnsInValue
       this.deserializeNamingStrategies = options.deserializeNamingStrategies
@@ -64,13 +67,13 @@ export class ModelOptions implements IModelOptions {
 }
 
 /**
- * 全局默认模型配置
+ * 库内默认模型配置（只作为读取回退，不提供可变的全局设置入口）
  *
  * 当没有显式配置时使用这些默认值
  */
 const defaultModelOptions: IModelProps = {
   noDefault: false,
-  enableDataState: true,
+  enableSnapshot: true,
   keepModelName: false,
   columnsInValue: false,
   deserializeNamingStrategies: NAMING_STRATEGIES.mix,
@@ -93,6 +96,12 @@ const defaultModelOptions: IModelProps = {
  */
 export function getModelProps<T extends ModelBase>(t_: T, prop: keyof IModelProps) {
   const t__ = toRaw(t_)
+  if (prop === 'enableSnapshot' || prop === 'enableDataState') {
+    const instance = t__[__MODEL_PROPS__]
+    const model = (t__.constructor as any)[__MODEL__]
+    return instance?.enableSnapshot ?? instance?.enableDataState ??
+      model?.enableSnapshot ?? model?.enableDataState ?? true
+  }
   return (
     t__[__MODEL_PROPS__]?.[prop] ??
     (t__.constructor as any)[__MODEL__]?.[prop] ??

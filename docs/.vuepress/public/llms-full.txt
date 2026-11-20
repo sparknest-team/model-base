@@ -1,0 +1,142 @@
+# ModelBase：给 AI 的完整开发指南
+
+> 本文是单文件、可直接交给 AI 阅读的 ModelBase 开发上下文。它对应仓库当前源码和测试；npm 已发布版本可能尚未包含这些改动。遇到版本差异，以目标项目安装的版本及其类型声明、测试为准。
+
+## 1. 这是什么
+
+`@model-base/core` 把接口 DTO 转为 TypeScript 模型实例，按 `@Column` 定义选择字段、映射名字、应用默认值、转换和序列化。模型可选地追踪本地编辑，提供变更数据、保存点和还原。它不提供 ORM、运行时类型校验或网络请求，也不会把本地修改自动提交到服务器。
+
+`@model-base/service` 是可选的请求协调层。它需要业务传入传输客户端，不能单独当 HTTP 客户端使用。
+
+最短心智模型：`DTO → create/反序列化 → ModelBase 实例 → getSerializableObject/序列化 → DTO`。列定义是结构，实例属性是当前值，保存点是变更比较的基准；三者分别变化。
+
+## 2. 安装和最小示例
+
+安装：`npm install @model-base/core`。仓库的教学测试位于 `packages/core/tests/demo/learning/journey.spec.ts`。
+
+```ts
+import { Column, ModelBase } from '@model-base/core'
+
+class User extends ModelBase {
+  @Column({ primary: true }) id!: number
+  @Column() displayName!: string
+  @Column({ default: false }) enabled!: boolean
+}
+
+const user = User.create({ id: 1, display_name: 'Ada', ignored: 123 })
+user.displayName // 'Ada'
+user.enabled // false
+user.getSerializableObject() // { id: 1, display_name: 'Ada', enabled: false }
+```
+
+通常只有声明了 `@Column` 的属性进入映射和输出，未知 `ignored` 被排除。`columnsInValue: true` 是显式的数据驱动例外。TypeScript 的 `number` / `string` 标注不负责运行时转换或校验。需要转换时写 `deserialize`；需要验证时在业务层使用校验器。无需 `reflect-metadata` 或 `emitDecoratorMetadata`。
+
+仓库采用 TypeScript 5 新装饰器，也保留旧式装饰器兼容。旧式编译设置通常需要 `experimentalDecorators: true` 和 `useDefineForClassFields: false`。优先用 `Model.create(dto)`；使用 `new Model(dto)` 时留意类字段初始化顺序，避免字段初始化器覆盖 DTO。
+
+## 3. 字段规则
+
+- `@Column({ name: 'display_name' })` 指定 DTO 名称；实例属性名仍由类字段决定。
+- `aliasName` 额外接受输入名称，输出仍使用规范名称。
+- `default` 在缺值或 `undefined` 时提供初值；显式 `null` 不等于缺值。可变对象和数组使用工厂，例如 `default: () => []`。
+- `noDefault: true` 在本次创建跳过默认值和自动初始化。
+- `deserialize` 将 DTO 值转入模型；`serialize` 将模型值转出 DTO。`formatter/unformatter` 是旧兼容名称。
+- `group` 和 `excludeGroup` 选择字段，二者同时传入时 `group` 优先；未分组字段仍作为公共字段。分组不构成安全权限控制。
+- `trim` 只影响配置了该选项的列，并需在输出时传 `{ trim: true }`。
+- 默认输入可接收驼峰和蛇形名称，默认输出采用蛇形。可用命名策略或输出时的 `camelCase` 调整。
+
+```ts
+class Profile extends ModelBase {
+  @Column({ name: 'display_name', aliasName: 'nickname' }) name!: string
+}
+const profile = Profile.create({ nickname: 'Ada' })
+profile.name // 'Ada'
+profile.getSerializableObject() // { display_name: 'Ada' }
+```
+
+`getSerializableObject()` 返回普通 DTO；`getSerializableString()` 在 DTO 上调用 `JSON.stringify()`。`getCleanSerializableObject()` 和 `getCleanSerializableString()` 会清理空值；清理策略可能删除 `null`，影响“清空字段”与“不更新字段”的区别。按服务端协议选择，需保留 `null` 时明确使用相应的 `clean` 选项。字符串方法本身不比较两个模型是否相等。
+
+## 4. 快照、编辑与保存
+
+`enableSnapshot` 默认是 `true`，`enableDataState` 是兼容别名；同一配置层两者都有时新名称优先。配置优先级为本次实例选项 > 类配置 > 默认值。创建参数只影响这次创建的模型树，不修改全局行为。Node 中仅做转换时，使用 `User.create(dto, { enableSnapshot: false })` 关闭快照和 ModelBase 自己的追踪 Proxy；此时 `isChanged()` 为 false、变更查询为空、还原不执行。
+
+标准静态模型树采用延迟快照：创建时不递归保存完整旧 DTO，首次改动记录相关旧值，查询旧数据时按需物化。自定义序列化、访问器或数据驱动列可能走即时快照。关闭快照可节省追踪相关内存，但不影响 DTO 转换。不要通过内部 `__CLONE__` 的存在与否判断业务变化。
+
+```ts
+const user = User.create({ id: 1, display_name: 'Ada' })
+user.displayName = 'Grace'
+user.isChanged() // true
+user.getChangedData() // { display_name: 'Grace' }
+user.revertChangedData()
+user.displayName // 'Ada'
+
+user.displayName = 'Grace'
+user.saveChangedData() // 将当前值确认为新的本地保存点；不发送请求
+user.isChanged() // false
+```
+
+在真实提交流程中，通常先提交 DTO，成功后再确认保存点。请求期间若继续编辑，要由业务处理并发版本；不要无条件保存整个当前实例。
+
+`update(dto)` 只回填已提供且非 `undefined` 的字段，完成后自动保存新的基准，因此不适合表示尚未提交的本地编辑。子模型数组按元素主键合并，未出现在输入中的既有元素通常保留；它不是完整列表替换。`setDataByOriginal(dto)` 按初始化规则重填，默认建立新基准；传 `{ keepBackUp: true }` 则保留旧基准。直接赋值和 `setColumnData()` 保留当前保存点。`mergeModel()` 合并来源模型中非 `undefined` 的已声明值，并保留当前保存点。
+
+`getOriginalData()` 返回保存点 DTO 的可变引用，不是防御性副本。`getChangedData()` 不是 JSON Patch；删除字段可能表示为 `undefined`，经过 `JSON.stringify()` 会被省略。`isChanged()` 比较结果，写回原值可能重新变为 false。
+
+## 5. 嵌套模型与数组
+
+```ts
+class Address extends ModelBase {
+  @Column() city!: string
+}
+class Item extends ModelBase {
+  @Column({ primary: true }) id!: number
+  @Column() label!: string
+}
+class Order extends ModelBase {
+  @Column({ model: Address }) address!: Address
+  @Column({ model: Item, default: () => [] }) items!: Item[]
+}
+
+const order = Order.create({ address: { city: '北京' }, items: [{ id: 1, label: 'A' }] })
+order.address.city = '上海'
+order.isChanged() // true
+```
+
+`model` 可传类或惰性类型引用。显式声明的子模型会递归创建模型，参与受支持的追踪与还原。创建后的 `order.address` 是新子模型，不直接复用外部原始 DTO 对象。主键声明在数组元素模型的列上；它参与匹配和变化分类，不自动保证唯一。重复或复合主键需要业务注意。字典和字典数组使用对应的模型集合机制。
+
+没有声明 `model` / `childType` 的普通对象或数组属于不透明边界；不要承诺内部属性能自动追踪和还原，也不要假定所有普通输入都会深克隆。Date、Map、Set 的内部修改和循环对象图也不在通用深层追踪保证内。
+
+## 6. 动态结构
+
+普通 `@Column` 模型结构稳定，内部缓存列计划。`dynamicModelBase(config)` 从配置生成一个类，生成后通常仍按静态结构缓存；`createDynamicModel` 可直接创建实例。`columnsInValue: true` 根据当前 DTO 或实例的可枚举自有字段实时推断列，字段新增、删除或类型变化都可能改变列计划，同类不同实例也可以有不同字段。显式列定义优先于推断结果。面对不可信输入，先筛选允许的字段。
+
+要给已有类追加字段，使用公开的 `ColumnDefine(config)(Model.prototype, key)` 注册入口。注册使相关缓存失效，包括受影响的继承结构；它只改变结构，不会自动保存或迁移已有实例的历史快照。`getColumns()` 返回独立副本，修改其结果不会注册列；`getColumnsCached()` 是共享读取入口，不应修改返回结果。动态工厂当前可能原地归一化传入配置，最好为每次构建生成新配置对象。
+
+## 7. Vue 3 和 Node
+
+Vue 3 的 `reactive()` 代理负责界面响应式，ModelBase 的 Proxy 负责业务快照。通过 Vue 包装后的对象读写，才能让 watcher 看到更新与回滚；不要保留原始引用再从它赋值。不要把响应式对象的基本值直接解构后当成响应式变量。组件外创建的 watcher 使用完应停止。
+
+```ts
+import { reactive } from 'vue'
+const form = reactive(User.create({ id: 1, display_name: 'Ada' }))
+form.displayName = 'Grace'
+form.revertChangedData() // 通过 Vue 包装的对象调用，watcher 可观察到恢复
+```
+
+`enableSnapshot: false` 不会关闭 Vue 自身的响应式代理。Node 大批量转换如果不需要回滚，建议按实例关闭快照；不要使用影响其他 npm 包的全局可变开关。需要快照时，避免无条件对所有实例调用 `getOriginalData()`，因为这会物化旧 DTO；用真实字段数、修改比例和查询频率测内存。
+
+## 8. 可选 service 层
+
+额外安装 `@model-base/service`。构造 `Driver({ api, url })`，其中 `api` 需实现业务使用的 `get/post/put/patch/del` 等方法；`CoreService` 调用 `driver.getApi()` 获取它。`Driver.url` 不由 `CoreService` 自动拼接到请求地址，应明确传入业务请求路径。不要把裸客户端对象直接当作 Driver。
+
+`CoreService` 负责请求参数、传输、`ServiceResponse` 和可选 `wrapper`。单个模型可用模型类作 wrapper；数组、字典、字典数组和流分别使用对应包装器。Wrapper 是有状态对象，并发请求各自创建实例。默认 `isValid()` 判断业务结果码 `success`，不能与 HTTP 200 等同。传输或后续转换错误通常写入 `serviceError`，请求预处理也可能抛出 Promise 拒绝；调用侧两者都要处理。请求参数的空值清理需与服务端清空协议一致。
+
+完整可执行示例在仓库 `packages/service/tests/demo/quickstart.spec.ts`，说明在 `/guide/service/`。
+
+## 9. 比较、边界与提问方式
+
+`isModelEqual(other)` 是兼容的逐列值比较：按当前模型列对应的序列化名称直接取两边的值，复杂值使用 JSON 语义比较。它不检查实例是否属于同一模型类，也不先执行完整 DTO 序列化，所以不是任意对象的通用深相等。`isContainsModel(other)` 忽略目标中 `undefined` 的列，再沿用相似比较。模型基类的 `equal()` 默认只返回 true，不能当作比较实现。两个序列化字符串的 `===` 则比较最终 JSON 文本，会受到输出规则和字段顺序影响。
+
+以下问题先确认目标项目的安装版本、模型定义和是否开启快照：输入 DTO 的字段名是什么、是否设置 group/clean、字段有没有 model/primary、调用的是直接赋值还是 update、要比较当前数据还是保存点。文档中的行为描述以仓库测试覆盖的路径为准，不应推断所有复杂对象和框架代理的组合都有相同行为。
+
+## 10. 查阅和验证
+
+文档入口：`/guide/roadmap/`、`/guide/reference/`、`/guide/examples/`、`/guide/faq/`、`/guide/changelog/`。教程来源：`packages/core/tests/demo/learning/journey.spec.ts`、`packages/core/tests/demo/learning/vue.spec.ts`、`packages/service/tests/demo/quickstart.spec.ts`。仓库内可运行 `npm test -- packages/core/tests/demo/learning --runInBand`、`npm test -- packages/service/tests/demo --runInBand`，并用 `npm run check:docs` 检查文档引用。

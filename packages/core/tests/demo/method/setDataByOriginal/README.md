@@ -2,46 +2,28 @@
 permalink: /method/setDataByOriginal/
 ---
 
-# setDataByOriginal 设置模型数据
+# setDataByOriginal：按创建规则重填
 
-## 说明
+[学习路线](/guide/roadmap/) · [示例索引](/guide/examples/) · [API 速查](/guide/reference/)
 
-### setDataByOriginal 的参数
+## 解决什么问题
 
-**setDataByOriginal(dto: any, options?: {keepBackUp?: boolean})**
+回填数据时选择是否继续保留旧的变更基准。
 
-- **dto**：input 数据，后端返回的数据
-- **options**：可选
-  - **keepBackUp**（或者叫 keepStatus 好一些）：如果为 true，则不会更新 saved 的状态。getChanged 方法可以获取到这些数据的变化。如果为 false，通过当前方法赋值后再调用 getChanged 会返回为{}，内部会调用 saveChangedData 方法
+## 示例与结果
 
-## 案例
+片段来自自动化测试。使用 User、Address、Item 的片段，请先使用[快速上手中的模型定义](/guide/start/)；其他类在片段内定义。所需 core API 从 `@model-base/core` 导入。
 
-::: tabs
-
-@tab 案例一
-
-### 模型
-
-```ts :no-line-numbers
-<!-- @include: ./init.spec.ts#model -->
+```ts
+<!-- @include: ../../learning/journey.spec.ts#refill -->
 ```
 
-### 实例初始化
+输出注释由 `learning/journey.spec.ts` 中对应断言验证。各片段独立运行，不依赖上一页的修改状态。
 
-```ts :no-line-numbers
-<!-- @include: ./init.spec.ts#instance -->
-```
+## 使用边界
 
-### 调用函数
+keepBackUp 默认为 false，重填后保存；true 保留旧保存点。会应用初始化/default 规则，但不是删除对象上所有未提供字段的通用 replace。不要误写为 keepStatus。
 
-```ts :no-line-numbers
-<!-- @include: ./init.spec.ts#fn -->
-```
+## 下一步
 
-### 打印日志
-
-```ts :no-line-numbers
-<!-- @include: ./init.spec.ts#log -->
-```
-
-:::
+[继续阅读 →](/method/extend/) · [返回按任务检索](/guide/examples/)

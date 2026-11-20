@@ -129,6 +129,7 @@ export function serialize(
   data: ModelBase | ModelBase[] | { [key: string]: ModelBase } | { [key: string]: ModelBase[] } | undefined,
   options?: TSerializableParam,
 ) {
+  // 未传选项与传 {} 的默认清理行为不同，保留历史规则，不合并成统一默认对象。
   const options_ = options || { clean: CLEAN_ENUM.CLEAN_UNDEFINED_AND_NULL }
 
   if (Array.isArray(data)) {

@@ -217,8 +217,10 @@ export interface IColumnInner<T = any> extends IColumn<T> {
 export interface IModelProps {
   /** 初始化时是否跳过默认值设置 */
   noDefault?: boolean
-  /** 是否启用数据状态追踪（变更检测） */
+  /** @deprecated 请使用 enableSnapshot。兼容别名；关闭时禁用快照、变更检测和回滚。 */
   enableDataState?: boolean
+  /** 启用快照、变更检测和回滚，默认 true。同一层配置中优先于 enableDataState。 */
+  enableSnapshot?: boolean
   /** 是否保持原始属性名（不进行命名转换） */
   keepModelName?: boolean
   /** 是否从实例值推断列定义 */
@@ -239,9 +241,9 @@ export interface IModelOptions extends IModelProps {
   group?: string
   /** 排除的分组标识 */
   excludeGroup?: string
-  /** 内部标识：是否已完成初始化 */
+  /** 内部标记：true 时跳过基类构造中的映射，由工厂在构造完成后执行。 */
   __isInit?: boolean
-  /** 内部标识：是否跳过反序列化处理 */
+  /** 历史兼容标记；当前映射链路不读取它，不保证跳过反序列化。 */
   __noDeserialize?: boolean
 }
 

@@ -2,29 +2,28 @@
 permalink: /group/
 ---
 
-# 按场景选择字段
+# 按业务场景选择字段
 
-字段分组适合让同一个模型服务于不同的数据提交场景，例如“创建”“编辑”和“详情”。
-通过 `@Column({ group })` 声明字段所属分组，再在初始化、序列化或变更检测时传入 `group`。
+[学习路线](/guide/roadmap/) · [示例索引](/guide/examples/) · [API 速查](/guide/reference/)
+
+## 解决什么问题
+
+让同一个模型支持详情、创建、编辑等不同字段集合。
+
+## 示例与结果
+
+片段来自自动化测试。使用 User、Address、Item 的片段，请先使用[快速上手中的模型定义](/guide/start/)；其他类在片段内定义。所需 core API 从 `@model-base/core` 导入。
 
 ```ts
-class User extends ModelBase {
-  @Column()
-  id?: number
-
-  @Column({ group: ['create', 'edit'] })
-  displayName?: string
-
-  @Column({ group: 'create' })
-  initialPassword?: string
-}
+<!-- @include: ../learning/journey.spec.ts#groups -->
 ```
 
-## 选择规则
+输出注释由 `learning/journey.spec.ts` 中对应断言验证。各片段独立运行，不依赖上一页的修改状态。
 
-- 未指定 `group` 时处理全部字段。
-- 指定 `group` 时保留未分组字段，以及属于该分组的字段。
-- `excludeGroup` 用于排除一个或多个分组。
-- 同时传入 `group` 和 `excludeGroup` 时，`group` 优先。
+## 使用边界
 
-完整配置和可运行示例请参阅[字段分组](/column/group/)。
+分组会筛选字段，不进行权限校验。未分组字段保留；同时传入 group 和 excludeGroup 时 group 优先。
+
+## 下一步
+
+[继续阅读 →](/column/group/) · [返回按任务检索](/guide/examples/)

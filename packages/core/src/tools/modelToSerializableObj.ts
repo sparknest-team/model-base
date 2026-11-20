@@ -5,11 +5,68 @@
  */
 
 import { cloneDeep, isPlainObject } from 'lodash'
+import { SnapshotCopy } from '../_utils/changeTracking/snapshotCopy'
+import { snapshotColumnsKey } from '../_utils/columnRegistry'
 import { getColumnSerializeName } from '../_utils/getColumnSerializeName'
 import { getModelProps } from '../_utils/ModelBaseProps'
 import { NAMING_STRATEGIES } from '../constant'
 import { CLEAN_ENUM, IColumnSerialize, type IColumnInner, type TSerializableParam } from '../decorator/types'
 import { type ModelBase } from '../model/ModelBase'
+
+/** 空值判断针对转换前的值；未指定策略时保留历史 CLEAN_DIRTY 行为。 */
+function isEmptyValue(value: any, clean: TSerializableParam['clean']): boolean {
+  if (clean === CLEAN_ENUM.CLEAN_UNDEFINED) return value === undefined
+  if (clean === CLEAN_ENUM.CLEAN_UNDEFINED_AND_NULL) return value === undefined || value === null
+
+  const isEmptyString = typeof value === 'string' && value.trim() === ''
+  const isEmptyArray = Array.isArray(value) && value.length === 0
+  const isEmptyObject = isPlainObject(value) && Object.keys(value).length === 0
+  return value === undefined || value === null || isEmptyString || isEmptyArray || isEmptyObject
+}
+
+/** group 优先于 excludeGroup；未分组字段始终保留。 */
+function isExcludedByGroup(column: IColumnInner, params: TSerializableParam): boolean {
+  if (typeof params.group !== 'undefined') {
+    return column.group?.indexOf(params.group) === -1
+  }
+  if (typeof params.excludeGroup === 'string') {
+    return !!column.group && column.group.indexOf?.(params.excludeGroup) !== -1
+  }
+  if (Array.isArray(params.excludeGroup)) {
+    return params.excludeGroup.some((group) => !!column.group && column.group.indexOf?.(group) !== -1)
+  }
+  return false
+}
+
+/** 普通字段转换。旧 unformatter 优先级、回调 this 和原值引用均保持不变。 */
+function serializeColumnValue<T extends ModelBase>(
+  target: T,
+  key: string,
+  column: IColumnInner,
+  serializeName: string,
+  params: TSerializableParam,
+  snapshot?: SnapshotCopy,
+): any {
+  let value = target[key]
+  if (typeof value === 'object' && value !== null) {
+    value = snapshot ? snapshot.clone(value) : cloneDeep(value)
+  }
+  const serialize = column.unformatter || column.serialize
+  if (typeof serialize === 'function') {
+    const context: IColumnSerialize<T> = {
+      value: target[key],
+      name: serializeName,
+      property: key,
+      deserializeData: target,
+      column,
+    }
+    value = serialize.apply(target, [context])
+  }
+  if (column.trim && params.trim && typeof value === 'string') {
+    value = value.trim()
+  }
+  return value
+}
 
 /**
  * 将模型实例转换为可序列化的对象
@@ -43,6 +100,21 @@ export function modelToSerializableObj<T extends ModelBase>(
   this_: T,
   params: TSerializableParam,
 ): { [index: string]: any } {
+  return serializeModel(this_, params)
+}
+
+/** 内部快照生成入口：隔离返回数据并复用安全子图，不改变公开 DTO 转换的回调返回引用。 */
+export function modelToSnapshot<T extends ModelBase>(model: T, params: TSerializableParam): Record<string, any> {
+  const snapshot = new SnapshotCopy()
+  return snapshot.finish(serializeModel(model, params, snapshot))
+}
+
+/** 共享递归遍历；snapshot 仅影响复制策略，不改变清理、回调和分组的执行顺序。 */
+function serializeModel<T extends ModelBase>(
+  this_: T,
+  params: TSerializableParam,
+  snapshot?: SnapshotCopy,
+): { [index: string]: any } {
   const sns =
     (typeof params.camelCase === 'boolean'
       ? params.camelCase
@@ -50,60 +122,46 @@ export function modelToSerializableObj<T extends ModelBase>(
         : NAMING_STRATEGIES.snakeCase
       : null) ?? getModelProps(this_, 'serializeNamingStrategies')
   const dto: { [index: string]: any } = {}
-  // Column metadata is immutable after a model class has been initialized. Reuse
-  // the constructor-level cache instead of deep-merging decorator metadata on
-  // every serialization (including every nested child serialization).
+  // 冻结视图使用保存时的计划；其他对象统一走兼容入口，内部处理静态/动态分流。
   const columns =
-    (((getModelProps(this_, 'columnsInValue')
-      ? (this_ as ModelBase).getColumns?.()
-      : (this_ as ModelBase).getColumnsCached?.()) as { [key: string]: IColumnInner }) || {})
+    ((this_ as any)[snapshotColumnsKey] || (this_ as ModelBase).getColumnsCached?.() || {}) as Record<string, IColumnInner>
   const target = this_ as T
   for (const key in columns) {
     if (columns.hasOwnProperty(key)) {
       const value = target[key] as any
-      const isUndefined = value === void 0
-      const isNull = value === null
-      let isEmpty: boolean
-      if (params.clean === CLEAN_ENUM.CLEAN_UNDEFINED) {
-        isEmpty = isUndefined
-      } else if (params.clean === CLEAN_ENUM.CLEAN_UNDEFINED_AND_NULL) {
-        isEmpty = isUndefined || isNull
-      } else {
-        // The more expensive string/object checks are only needed by CLEAN_DIRTY
-        // (and preserve the historical default behavior when clean is omitted).
-        const isEmptyString = typeof value === 'string' && value.trim() === ''
-        const isEmptyArray = Array.isArray(value) && value.length === 0
-        const isEmptyObject = isPlainObject(value) && Object.keys(value).length === 0
-        isEmpty = isUndefined || isNull || isEmptyString || isEmptyArray || isEmptyObject
-      }
+      const isEmpty = isEmptyValue(value, params.clean)
       const serializeName = getColumnSerializeName(columns[key], sns)
       const emptyValueRaw = columns[key].emptyValue as string | (() => any)
       const emptyValue = typeof emptyValueRaw === 'function' ? emptyValueRaw() : emptyValueRaw
       if (columns[key].childType) {
-        // 如果原始数据中没有这个字段，则不存入saveData
+        // 子模型字段为假值时不输出；集合分支的空值清理仍在递归转换后执行。
         if (value) {
           if (Array.isArray(value)) {
             dto[serializeName] = []
             value.forEach((m: any) => {
-              dto[serializeName].push(modelToSerializableObj(m, params))
+              dto[serializeName].push(serializeModel(m, params, snapshot))
+            })
+          } else if (columns[key].type === 'record') {
+            Object.keys(value || {}).forEach((k) => {
+              dto[serializeName] = dto[serializeName] || {}
+              dto[serializeName][k] = serializeModel(target[key][k], params, snapshot)
+            })
+          } else if (columns[key].type === 'recordArray') {
+            Object.keys(value || {}).forEach((k) => {
+              dto[serializeName] = dto[serializeName] || {}
+              value[k]?.forEach((m: any) => {
+                dto[serializeName][k] = dto[serializeName][k] || []
+                dto[serializeName][k].push(serializeModel(m, params, snapshot))
+              })
             })
           } else {
-            if (columns[key].type === 'record') {
-              Object.keys(value || {}).forEach((k) => {
-                dto[serializeName] = dto[serializeName] || {}
-                dto[serializeName][k] = modelToSerializableObj(target[key][k], params)
-              })
-            } else if (columns[key].type === 'recordArray') {
-              Object.keys(value || {}).forEach((k) => {
-                dto[serializeName] = dto[serializeName] || {}
-                value[k]?.forEach((m: any) => {
-                  dto[serializeName][k] = dto[serializeName][k] || []
-                  dto[serializeName][k].push(modelToSerializableObj(m, params))
-                })
-              })
-            } else {
-              dto[serializeName] = modelToSerializableObj(value, params)
+            dto[serializeName] = serializeModel(value, params, snapshot)
+          }
+          if (snapshot && dto[serializeName] && typeof dto[serializeName] === 'object') {
+            if (columns[key].type === 'recordArray') {
+              Object.values(dto[serializeName]).forEach(list => snapshot.container(list as any))
             }
+            snapshot.container(dto[serializeName])
           }
           if (isEmpty) {
             delete dto[serializeName]
@@ -113,79 +171,21 @@ export function modelToSerializableObj<T extends ModelBase>(
           }
         }
       } else {
-        let value = target[key]
-        // 处理any类型的数据，解除对普通对象的数据的引用。
-        if (typeof value === 'object' && value !== null) {
-          value = cloneDeep(value)
-        }
-        const serialize = columns[key].unformatter || columns[key].serialize
-        if (typeof serialize === 'function') {
-          const paramsSerialize: IColumnSerialize<T> = {
-            value: target[key],
-            name: serializeName,
-            property: key,
-            deserializeData: target,
-            column: columns[key],
-          }
-          value = serialize.apply(target, [paramsSerialize])
-        }
-
-        // if (params.clean === CLEAN_ENUM.CLEAN_DIRTY) {
-        //   cleanDirty(this_, key, dto, serializeName, value)
-        // } else if (params.clean === CLEAN_ENUM.CLEAN_UNDEFINED) {
-        //   // 默认null或者undefined的字段会包含在返回的对象中，如果需要返回对象不返回null和undefined的值，调用方法时传true
-        //   if (typeof target[key] !== 'undefined') {
-        //     dto[serializeName] = value
-        //   }
-        // } else if (params.clean === CLEAN_ENUM.CLEAN_UNDEFINED_AND_NULL) {
-        //   // 默认null或者undefined的字段会包含在返回的对象中，如果需要返回对象不返回null和undefined的值，调用方法时传true
-        //   if (typeof target[key] !== 'undefined' && target[key] !== null) {
-        //     dto[serializeName] = value
-        //   }
-        // } else {
-        //   dto[serializeName] = value
-        // }
-        if (columns[key].trim && params.trim && typeof value === 'string') {
-          value = (value as string).trim()
-        }
+        const serializedValue = serializeColumnValue(target, key, columns[key], serializeName, params, snapshot)
         if (isEmpty) {
           if (typeof emptyValue !== 'undefined' && params?.enableEmptyValue === true) {
             dto[serializeName] = emptyValue
           }
         } else {
-          dto[serializeName] = value
+          dto[serializeName] = serializedValue
         }
       }
-      // todo 后续可以再兼容group是数组的情况
-      // 处理分组的逻辑 begin
-      if (typeof params.group !== 'undefined') {
-        // console.log('param.group', columns[key].group, param.group)
-        // 如果有分组，必须返回分组中的数据。
-        // 此处的逻辑是把非当前分组的数据剔除掉。
-        if (columns[key].group) {
-          // console.log('group', columns[key].group)
-          // console.log('param.group', param.group)
-        }
-        if (columns[key].group?.indexOf(params.group) === -1) {
-          // console.log('delete', columns[key].group, param.group)
-          delete dto[serializeName]
-        }
-      } else if (typeof params.excludeGroup !== 'undefined') {
-        if (
-          typeof params.excludeGroup === 'string' &&
-          columns[key].group &&
-          columns[key].group?.indexOf?.(params.excludeGroup) !== -1
-        ) {
-          delete dto[serializeName]
-        } else if (
-          Array.isArray(params.excludeGroup) &&
-          params.excludeGroup.some((group) => columns[key].group && columns[key].group?.indexOf?.(group) !== -1)
-        ) {
-          delete dto[serializeName]
-        }
+      // 保持后置过滤：即使字段被排除，既有转换回调仍然执行。
+      if (isExcludedByGroup(columns[key], params)) {
+        delete dto[serializeName]
       }
-      // 处理分组的逻辑 end
     }
   }
+  snapshot?.container(dto)
   return dto
 }

@@ -19,7 +19,7 @@ export default hopeTheme(
 
     repo: 'https://github.com/loca-spirit/model-base',
 
-    footer: 'Power by <a href="" target="_blank">「 One Power tech Team 」</a>',
+    footer: 'ModelBase · TypeScript 数据模型、DTO 转换与变更追踪',
     displayFooter: true,
 
     locales: {
@@ -30,8 +30,8 @@ export default hopeTheme(
         // Sidebar
         sidebar: zhSideBar,
 
-        prevLink: false,
-        nextLink: false,
+        prevLink: true,
+        nextLink: true,
       },
     },
     lastUpdated: true,

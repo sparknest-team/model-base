@@ -36,14 +36,17 @@
 
 import merge from 'deepmerge'
 import { cloneDeep } from 'lodash'
+import { jsonEqual } from '../_utils/jsonEqual'
 import { getChange } from '../_utils/ChangedModelUtil'
+import { trackModel, deferSnapshot, clearPendingSnapshot, SnapshotStore } from '../_utils/changeTracking/proxyState'
 import { getModelProps, initModelOptions } from '../_utils/ModelBaseProps'
 import { createModelByDTO, deepCopy, extendModelByDTO, updateModelByDTO } from '../_utils/ModelBaseUtil'
 import { toRaw } from '../_utils/toRaw'
-import { __CLONE__, __COLUMNS__, __COLUMNS_CACHED__, __MODEL__, NAMING_STRATEGIES } from '../constant'
+import { __CLONE__, __MODEL__, NAMING_STRATEGIES } from '../constant'
+import { resolveStaticColumns } from '../_utils/columnRegistry'
 import { generateColumnsFromData } from '../decorator/Column'
 import { CLEAN_ENUM, IColumnInner, IDataModel, IModelOptions, ModelType } from '../decorator/types'
-import { modelToSerializableObj } from '../tools/modelToSerializableObj'
+import { modelToSerializableObj, modelToSnapshot } from '../tools/modelToSerializableObj'
 
 /**
  * 基于原始数据设置的选项
@@ -53,6 +56,18 @@ export interface IDataByOriginalOption extends IModelOptions {
   keepBackUp?: boolean
 }
 
+/** 内部读取主键不需要公开 API 的元数据副本；自定义主键方法仍按原调用次数执行。 */
+function primaryColumns(model: ModelBase) {
+  if (model.getPrimaryKey !== ModelBase.prototype.getPrimaryKey) return model.getPrimaryKey()
+  const columns = model.getColumnsCached()
+  return Object.keys(columns).filter(key => columns[key].primary)
+    .map(key => ({ primaryKey: key, primaryColumn: columns[key] }))
+}
+
+/**
+ * 先递归调用已声明子模型，再调用当前实例方法和类配置方法。
+ * 字符串表达式沿用 new Function 执行，仅可使用可信配置，不能接收外部未校验文本。
+ */
 function callMethod(
   this_: any,
   param: { method: string },
@@ -87,7 +102,7 @@ function callMethod(
         return new Function('$model', 'with($model) { return ('.concat(res[1], '); }'))(this_)
       }
     } catch (err) {
-      // console.log(err)
+      // 保留旧表达式分支的错误处理，不在注释整理中扩大或收窄异常边界。
     }
   }
   if (modelOptions.methods[param.method]) {
@@ -95,74 +110,61 @@ function callMethod(
   }
 }
 
-function setColumnToTarget(columns: { [key: string]: IColumnInner }, target: ModelBase, curProto: any) {
-  const metadata = (target.constructor as any)[Symbol.metadata] || {}
-  const columns_ = metadata[__COLUMNS__] || {}
-  if (columns_) {
-    columns = merge(columns, columns_, { clone: true })
-  }
-  return columns
-}
-
-function getColumnsUtil(columns: { [key: string]: IColumnInner }, target: ModelBase): { [key: string]: IColumnInner } {
-  const curProto = Object.getPrototypeOf(target)
-  if (Object.getPrototypeOf(curProto)?.getColumns) {
-    columns = merge(columns, getColumnsUtil(columns, curProto) || {}, {
-      clone: true,
-    })
-    return setColumnToTarget(columns, target, curProto)
-  }
-  return setColumnToTarget(columns, target, curProto)
-}
-
+/** 模型的公共操作入口；映射、序列化、快照与差异计算委托给各自内部模块。 */
 export class ModelBase {
   // 做标记用，判断当前class是不是继承ModelBase
   public static isModelBase = true
+  /** 创建实例并安装可选的追踪代理；工厂入口可推迟 DTO 映射至子类构造完成后。 */
   constructor(dto?: any, options?: IModelOptions, ...rest: any) {
-    const t_ = toRaw(this)
-    initModelOptions(t_, options)
+    const rawInstance = toRaw(this)
+    initModelOptions(rawInstance, options)
+    const instance = getModelProps(rawInstance, 'enableSnapshot') ? trackModel(rawInstance) : rawInstance
+    // __isInit 是历史内部标记：true 表示由工厂稍后映射，不是“已经完成初始化”。
     if (!options?.__isInit) {
-      createModelByDTO<typeof this>(t_, (t_ as ModelBase).getColumnsCached(), dto, options)
+      createModelByDTO(instance, instance.getColumnsCached(
+        getModelProps(instance, 'columnsInValue') ? { dto } : undefined,
+      ), dto, options)
     }
+    // 返回代理后，子类初始化和后续业务赋值均作用于同一个实例入口。
+    return instance
   }
 
   /**
-   * @description 创建一个模型，这个模型是基于当前模型的数据创建的，不会触发 deserialize 方法，不会设置默认值。
-   * @param this
-   * @param model
-   * @param options
-   * @returns
+   * 旧式创建入口：调用时 this 必须绑定模型构造器，而非模型实例。
+   * 跳过默认值，待子类构造完成后映射输入并建立保存点。
+   * 保留 __noDeserialize 标记用于兼容，但当前映射链路不读取它，转换回调仍可能执行。
+   * 保留实例方法的位置及调用约定；它不同于包级 createModel 工具函数。
    */
   public createModel<T extends ModelBase>(
     this: new (dto: any, options?: IModelOptions) => T,
-    model: ModelType<typeof this>,
+    source: ModelType<typeof this>,
     options?: IModelOptions,
   ) {
-    const t_ = toRaw(this)
-    const options_ = { ...(options || {}) }
-    options_.__isInit = true
-    options_.__noDeserialize = true
-    options_.noDefault = true
-    const t__ = new t_(model, options_)
-    createModelByDTO<T>(t__, (t__ as ModelBase).getColumnsCached(), model, options_)
-    return t__ as T
+    const ModelConstructor = toRaw(this)
+    const creationOptions = { ...options, __isInit: true, __noDeserialize: true, noDefault: true }
+    const instance = new ModelConstructor(source, creationOptions)
+    createModelByDTO(instance, instance.getColumnsCached(
+      getModelProps(instance, 'columnsInValue') ? { dto: source } : undefined,
+    ), source, creationOptions)
+    return instance
   }
 
-  // 为了支持deno，无法在构造函数中赋值，所以需要提供一个静态方法来创建模型，或者通过新版ModelBase的装饰器去实现，是支持new ModelBase()的。
-  // createModel 是 create 的别名，区别是dto数据是否有严格的类型校验。
+  /** 先完成整个构造链，再统一映射 DTO，避免在基类构造阶段重复赋值。 */
   public static create<T extends ModelBase>(
     this: new (dto: any, options?: IModelOptions, ...res: any) => T,
     dto?: any,
     options?: IModelOptions,
     ...rest: any
   ) {
-    const t_ = toRaw(this)
-    // Internal flags must never be written into the caller's options object.
-    const options_ = { ...(options || {}) }
-    options_.__isInit = true
-    const t__ = new t_(dto, options_, rest)
-    createModelByDTO<T>(t__, (t__ as ModelBase).getColumnsCached(), dto, options_)
-    return t__
+    const ModelConstructor = toRaw(this)
+    // 只修改本次创建的配置副本，不向调用方 options 写入内部标记。
+    const creationOptions = { ...options, __isInit: true }
+    // 保留历史约定：额外参数作为一个数组传给构造器，不在此展开。
+    const instance = new ModelConstructor(dto, creationOptions, rest)
+    createModelByDTO(instance, instance.getColumnsCached(
+      getModelProps(instance, 'columnsInValue') ? { dto } : undefined,
+    ), dto, creationOptions)
+    return instance
   }
 
   /**
@@ -183,6 +185,7 @@ export class ModelBase {
     return this
   }
 
+  /** 将单个模型或集合重新按空 DTO 映射默认值，并建立新的保存点；不是撤销修改。 */
   public static resetDefault(target: ModelBase | ModelBase[] | { [key: string]: ModelBase }) {
     target = toRaw(target)
     if (target instanceof Array) {
@@ -199,28 +202,33 @@ export class ModelBase {
     return this
   }
 
+  /** 原地重置单个模型；仍遵守实例已有的 noDefault 等配置。 */
   public static resetDefaultObject<T extends ModelBase>(target: T, options?: IModelOptions) {
     const target_ = toRaw(target)
     createModelByDTO<T>(target_, (target_ as ModelBase).getColumnsCached(), {}, options)
     return target_
   }
 
+  /** 从保存点重建字段；通过调用方传入的对象写回，保留其外层响应式代理。 */
   public static revertChangedDataObject(target: ModelBase) {
+    if (!getModelProps(target, 'enableSnapshot')) return this
     const orgTarget = target as any
     target = toRaw(target)
     const C = Object.getPrototypeOf(target).constructor as typeof ModelBase
-    const org = C.create(target.getOriginalData(), { noDefault: true })
-    // const org = cloneDeep(target.getOriginalData())
-    const columns = (target as ModelBase).getColumns()
-    // const t = target as any
+    // 回滚才复制保存点，避免恢复后的可变字段反向污染保存点；日常赋值不承担此复制。
+    // 数据驱动列必须在临时恢复实例中继续启用，否则未装饰字段会在映射时丢失。
+    const dynamicOptions = getModelProps(target, 'columnsInValue')
+      ? { columnsInValue: true, keepModelName: getModelProps(target, 'keepModelName') } : {}
+    const org = C.create(cloneDeep(target.getOriginalData()), { ...dynamicOptions, noDefault: true, enableSnapshot: true })
+    const columns = (target as ModelBase).getColumnsCached()
     for (const key in columns) {
       orgTarget[key] = org[key]
-      // t[key] = org[key] 此处不需要更新代理对象原始对象的值，因为代理对象会帮你做这个事情。
-      // 也不要手动处理原始对象的值，否则代理对象不会更新。
+      // 不再对解包后的 target 重复赋值，否则可能绕过外层响应式通知。
     }
     return this
   }
 
+  /** 分发单个模型或模型数组的命名方法调用，不处理 Record 容器。 */
   public static callMethod(
     data: ModelBase | ModelBase[],
     params: { method: string },
@@ -239,49 +247,53 @@ export class ModelBase {
     }
   }
 
+  /** 从本模型开始递归调用命名方法；调用顺序与类配置表达式规则见内部 callMethod。 */
   public callMethod(params: { method: string }) {
     callMethod(toRaw(this), params)
   }
 
   /**
-   * @description 更新当前对象的值，如果值是对象，递归进行更新，而不改变原始对象的引用。
-   * @param dto
+   * 增量更新 DTO 中已提供的字段，并将更新后的状态保存为新基准。
+   * 已声明子模型尽量复用实例；数组按主键合并，普通对象字段直接替换，不能保证所有引用不变。
    */
   public update(dto: any) {
     const t_ = toRaw(this)
-    updateModelByDTO<typeof this>(t_, (t_ as ModelBase).getColumns({ dto }), dto)
+    updateModelByDTO<typeof this>(this, (t_ as ModelBase).getColumnsCached({ dto }), dto)
     return this
   }
 
+  /**
+   * 按创建规则重填字段（包括缺失字段的默认值），不同于 update 的增量合并。
+   * keepBackUp=true 保留旧保存点，否则建立新保存点；此处不转发其他 options 字段。
+   */
   public setDataByOriginal(dto: any, options?: IDataByOriginalOption) {
     type T = typeof this
     const t_ = toRaw(this)
     if (options?.keepBackUp) {
-      extendModelByDTO<T>(t_, (t_ as ModelBase).getColumns({ dto }), dto)
+      extendModelByDTO<T>(this, (t_ as ModelBase).getColumnsCached({ dto }), dto)
     } else {
-      createModelByDTO<T>(t_, (t_ as ModelBase).getColumns({ dto }), dto)
+      createModelByDTO<T>(this, (t_ as ModelBase).getColumnsCached({ dto }), dto)
     }
     return this
   }
 
   /**
-   * @description 整个对象是否相等，需要子类自己实现。
-   * ignoreEmptyString undefined 与 '' 比较视为相等
+   * 供子类覆盖的旧相等性入口；基类只返回 true，不实际比较字段。
    */
   public equal() {
     return true
   }
 
   /**
-   * @description 待完善
-   * @description 判断所有 column 对应的值是相等的。
+   * 按列对应的序列化名称直接读取两边的值并比较，不先调用完整序列化流程。
+   * 这是历史比较规则，不应直接当作任意两个模型实例的通用深比较。
    * ignoreEmptyString undefined 与 '' 比较视为相等
    */
   public isModelEqual(targetData: ModelBase, params?: { ignoreEmptyString?: boolean }) {
     targetData = toRaw(targetData)
     const t_ = toRaw(this)
     const sns = getModelProps(t_, 'serializeNamingStrategies')
-    const columns = (t_ as ModelBase).getColumns()
+    const columns = (t_ as ModelBase).getColumnsCached()
     const target = t_ as ModelBase
     let flag = true
     Object.keys(columns).forEach((columnName) => {
@@ -300,7 +312,7 @@ export class ModelBase {
       } else if (typeof currentValue === 'undefined' && typeof targetValue !== 'undefined') {
         flag = !!(params?.ignoreEmptyString && typeof targetValue === 'string' && targetValue === '')
       } else {
-        if (JSON.stringify(targetValue) !== JSON.stringify(currentValue)) {
+        if (!jsonEqual(targetValue, currentValue)) {
           flag = false
         }
       }
@@ -309,15 +321,15 @@ export class ModelBase {
   }
 
   /**
-   * @description 待完善
-   * @description 判断所有 column 对应的值是相等的。
+   * 部分匹配：忽略 targetData 中值为 undefined 的列，其余列沿用 JSON 语义比较。
+   * 与 isModelEqual 一样按序列化名称读取，不执行字段转换回调。
    * ignoreEmptyString undefined 与 '' 比较视为相等
    */
   public isContainsModel(targetData: ModelBase, params?: { ignoreEmptyString?: boolean }) {
     targetData = toRaw(targetData)
     const t_ = toRaw(this)
     const sns = getModelProps(t_, 'serializeNamingStrategies')
-    const columns = (t_ as ModelBase).getColumns()
+    const columns = (t_ as ModelBase).getColumnsCached()
     const target = t_ as ModelBase
     let flag = true
     Object.keys(columns).forEach((columnName) => {
@@ -337,7 +349,7 @@ export class ModelBase {
       } else if (typeof currentValue === 'undefined' && typeof targetValue !== 'undefined') {
         flag = !!(params?.ignoreEmptyString && typeof targetValue === 'string' && targetValue === '')
       } else {
-        if (JSON.stringify(targetValue) !== JSON.stringify(currentValue)) {
+        if (!jsonEqual(targetValue, currentValue)) {
           flag = false
         }
       }
@@ -368,29 +380,43 @@ export class ModelBase {
   }
 
   /**
-   * @description 变更保存点，将当前的数据作为最新的保存点。
+   * @description 变更保存点，将当前的数据作为最新的保存点。实例关闭快照时不执行；参数只能跳过本次保存。
    */
-  public saveChangedData(param?: { group?: string; excludeGroup?: string | string[]; enableDataState?: boolean }) {
+  public saveChangedData(param?: { group?: string; excludeGroup?: string | string[]; enableSnapshot?: boolean; enableDataState?: boolean }) {
     const t_ = toRaw(this)
-    const enableDs = param?.enableDataState ?? getModelProps(t_, 'enableDataState')
+    const enableDs = getModelProps(t_, 'enableSnapshot') && (param?.enableSnapshot ?? param?.enableDataState ?? true)
     if (enableDs) {
-      const dto_ = modelToSerializableObj(t_, {
+      // 构造器只持有弱键存储；具体实例作为 key，避免类元数据强引用全部实例。
+      const clone = (t_.constructor as any)[__CLONE__] || new SnapshotStore()
+      ;(t_.constructor as any)[__CLONE__] = clone
+      // 自定义列查询和动态列可能依赖当前值，不使用静态列的延迟计划。
+      const standardColumns = t_.getColumns === ModelBase.prototype.getColumns &&
+        t_.getColumnsCached === ModelBase.prototype.getColumnsCached && !getModelProps(t_, 'columnsInValue')
+      if (standardColumns && deferSnapshot(t_, t_.getColumnsCached() as Record<string, IColumnInner>, clone, {
+        camelCase: getModelProps(t_, 'serializeNamingStrategies') === NAMING_STRATEGIES.camelCase,
+        group: param?.group,
+        excludeGroup: param?.excludeGroup,
+      })) return this
+      // 不能安全延迟时保留即时序列化，尤其保证 getter 和转换回调仍在保存时执行。
+      clearPendingSnapshot(t_)
+      const dto_ = modelToSnapshot(t_, {
         group: param?.group,
         excludeGroup: param?.excludeGroup,
         clean: CLEAN_ENUM.CLEAN_UNDEFINED_AND_NULL,
       })
-      const clone = (t_.constructor as any)[__CLONE__] || new WeakMap()
-      clone.set(t_, cloneDeep(dto_))
+      clone.set(t_, dto_)
       ;(t_.constructor as any)[__CLONE__] = clone
     }
     return this
   }
 
   /**
-   * @description 获得对象被更改前的原始数据。
+   * 返回保存点 DTO；延迟保存点在此物化，关闭快照时返回空对象。
+   * 返回值不是每次新建的副本：直接修改它会改变后续比较和回滚的基准。
    */
   public getOriginalData() {
     const t_ = toRaw(this)
+    if (!getModelProps(t_, 'enableSnapshot')) return {}
     return (t_.constructor as any)[__CLONE__]?.get(t_) || {}
   }
 
@@ -414,7 +440,7 @@ export class ModelBase {
   }
 
   /**
-   * @description 获得可被序列化的 object 对象，这个对象没有去除了 空字符 空对象 空数组。
+   * 返回 DTO，默认只清理 undefined/null，保留空字符串、空对象和空数组。
    * @param params
    * clean 默认 CLEAN_ENUM.CLEAN_UNDEFINED_AND_NULL 兼容老的数据
    */
@@ -452,7 +478,7 @@ export class ModelBase {
   }
 
   /**
-   * @description 获得可被序列化的 string 字符串，这个没有字符串去除了 空字符 空对象 空数组。
+   * 将默认序列化 DTO 转成 JSON 文本，保留空字符串和空集合；JSON 不支持的值仍可能抛错。
    */
   public getSerializableString(param?: {
     group?: string
@@ -479,8 +505,9 @@ export class ModelBase {
     enableEmptyValue?: boolean
   }) {
     const t_ = toRaw(this)
+    if (!getModelProps(t_, 'enableSnapshot')) return {}
 
-    const columns = (t_ as ModelBase).getColumns()
+    const columns = (t_ as ModelBase).getColumnsCached()
     const target = t_ as ModelBase
     const targetData = t_.getSerializableObject({ ...params, enableEmptyValue: false })
     return getChange(columns, target, targetData, {
@@ -490,7 +517,8 @@ export class ModelBase {
   }
 
   /**
-   * @descriptor 获得变化数据的描述。
+   * 返回字段 CREATE/DELETE/UPDATE 描述；带主键的模型数组还提供按主键分类的变化。
+   * 数组未变更项也可能出现在 noChange 中，不能简单等同于 getChangedData 的键集合。
    */
   public getChangedDescriptor(params?: {
     group?: string
@@ -500,7 +528,8 @@ export class ModelBase {
     ignoreEmptyString?: boolean
   }) {
     const t_ = toRaw(this) as any
-    const columns = (t_ as ModelBase).getColumns()
+    if (!getModelProps(t_, 'enableSnapshot')) return {}
+    const columns = (t_ as ModelBase).getColumnsCached()
     const target = t_ as ModelBase
     const targetData = t_.getSerializableObject(params)
     return getChange(columns, target, targetData, {
@@ -513,14 +542,14 @@ export class ModelBase {
 
   /**
    * @deprecated 请使用extendModel
-   * @description 当前模型的key存在，就会覆盖，仅支持第一级level的覆盖。如果key是对象，或者数组，覆盖暂时不支持，建议用extendModel。
+   * 深复制输入后，按已声明属性名做顶层替换；对象/数组整体替换，不执行递归模型合并。
    * @param model
    */
   public extend(model: any) {
     model = toRaw(model)
     const data: { [index: string]: any } = cloneDeep(model)
     const t_ = toRaw(this)
-    const props = (t_ as ModelBase).getColumns()
+    const props = (t_ as ModelBase).getColumnsCached()
     for (const key in props) {
       if (data.hasOwnProperty(key)) {
         // 此处应该用this，不能用toRaw后的对象，会引起vue对象丢失响应的问题。
@@ -533,14 +562,14 @@ export class ModelBase {
   /**
    *
    * @deprecated 请使用mergeModel
-   * @description 当前模型的key对应的值存在，就会覆盖。
-   * @param model
+   * 使用旧 deepCopy 后覆盖非 undefined 的字段，不重置根保存点。
+   * 旧复制规则保留嵌套数组引用，不保证完整的深层隔离。
    */
   public extendModel(model: ModelBase) {
     model = toRaw(model)
     const newModel = deepCopy(model)
     const t_ = toRaw(this)
-    const props = (t_ as ModelBase).getColumns()
+    const props = (t_ as ModelBase).getColumnsCached()
     for (const key in props) {
       if (typeof (newModel as any)[key] !== 'undefined') {
         // 此处应该用this，不能用toRaw后的对象，会引起vue对象丢失响应的问题。
@@ -552,30 +581,27 @@ export class ModelBase {
 
   /**
    *
-   * @description 当前模型的key对应的值存在，就会覆盖。
-   * @param model
-   * @param options 待拓展
+   * 深复制输入后，用其中非 undefined 的已声明字段覆盖当前字段，不重置根模型保存点。
+   * 同类型模型合并时，按现有条件保留被替换子模型的原保存点。
    */
   public mergeModel(model: ModelType<typeof this>) {
     model = toRaw(model)
     const newModel = cloneDeep(model)
     const t_ = toRaw(this)
-    const props = (t_ as ModelBase).getColumns()
+    const props = (t_ as ModelBase).getColumnsCached()
     for (const key in props) {
-      if (typeof (newModel as any)[key] !== 'undefined') {
-        // 此处应该用this，不能用toRaw后的对象，会引起vue对象丢失响应的问题。
-        if ((t_ as any)[key]?.getOriginalData && t_.constructor === newModel.constructor) {
-          let origin = null
-          if ((t_ as any)[key]?.getOriginalData) {
-            origin = (t_ as any)[key].getOriginalData()
-          }
-          ;(this as any)[key] = (newModel as any)[key]
-          if (origin !== null) {
-            ;(t_[key].constructor as any)[__CLONE__].set(t_[key], origin)
-          }
-        } else {
-          ;(this as any)[key] = (newModel as any)[key]
+      if (typeof (newModel as any)[key] === 'undefined') continue
+      let origin = null
+      if (getModelProps(t_, 'enableSnapshot') && (t_ as any)[key]?.getOriginalData &&
+        getModelProps(t_[key], 'enableSnapshot') && t_.constructor === newModel.constructor) {
+        if ((t_ as any)[key]?.getOriginalData) {
+          origin = (t_ as any)[key].getOriginalData()
         }
+      }
+      // 通过原实例赋值以保留响应式代理；同类型合并沿用旧子模型快照。
+      ;(this as any)[key] = (newModel as any)[key]
+      if (origin !== null && getModelProps(t_[key], 'enableSnapshot')) {
+        ;(t_[key].constructor as any)[__CLONE__].set(t_[key], origin)
       }
     }
     return this
@@ -612,7 +638,7 @@ export class ModelBase {
     const t_ = toRaw(this)
     const target = t_ as any
     const valList: any[] = []
-    this.getPrimaryKey().forEach((item: any) => {
+    primaryColumns(this).forEach((item: any) => {
       valList.push(target[item.primaryKey])
     })
     return valList
@@ -626,7 +652,7 @@ export class ModelBase {
     const t_ = toRaw(this)
     const sns = getModelProps(t_, 'serializeNamingStrategies')
     const valList: any[] = []
-    this.getPrimaryKey().forEach((item) => {
+    primaryColumns(this).forEach((item) => {
       let column = item.primaryColumn.name
       if (sns === NAMING_STRATEGIES.camelCase) {
         column = item.primaryColumn.camelCaseName
@@ -636,25 +662,20 @@ export class ModelBase {
     return valList
   }
 
-  public getColumnsCached(data?: { dto?: any }) {
+  /**
+   * 静态列统一由列注册表解析；通常直接命中，仅注册后检查继承依赖。
+   * 数据驱动列或自定义 getColumns 可能依赖实例/DTO，必须实时计算。
+   * 命中后直接返回共享结果；业务代码需要可修改副本时使用 getColumns。
+   */
+  public getColumnsCached(data?: { dto?: any }): Record<string, IColumnInner> {
     const t_ = toRaw(this)
-    const columnsCached = t_.constructor[Symbol.metadata]?.[__COLUMNS_CACHED__]
-    if (columnsCached) {
-      return columnsCached
-    } else {
-      const columns = this.getColumns(data)
-      const metadata = t_.constructor[Symbol.metadata] || {}
-      metadata[__COLUMNS_CACHED__] = columns
-      if (t_.constructor[Symbol.metadata]) {
-        Object.assign((t_.constructor as any)[Symbol.metadata], metadata)
-      } else {
-        t_.constructor[Symbol.metadata] = metadata
-      }
-      ;(t_.constructor as any)[__COLUMNS_CACHED__] = columns
-      return columns
+    if (getModelProps(t_, 'columnsInValue') || this.getColumns !== ModelBase.prototype.getColumns) {
+      return this.getColumns(data)
     }
+    return resolveStaticColumns(t_.constructor)
   }
 
+  /** 计算列定义副本；columnsInValue 可从输入/实例值补充列，装饰器列按既有顺序合并。 */
   public getColumns(data?: { dto?: any }): { [key: string]: IColumnInner } {
     const t_ = toRaw(this)
     let columns_ = {} as { [key: string]: IColumnInner }
@@ -667,30 +688,19 @@ export class ModelBase {
       }
     }
 
-    // let keys = Object.keys(t_)
-    // const columns_ = {} as { [key: string]: IColumnInner }
-    const columns__ = t_.constructor[Symbol.metadata]?.[__COLUMNS__]
-    if (!columns__) {
-      return {}
-    }
-    if (columns__) {
-      return merge(columns_, columns__, {
-        clone: true,
-      })
-    }
-    let columns = {} as { [key: string]: IColumnInner }
-    columns = merge(columns_, getColumnsUtil(columns, Object.getPrototypeOf(t_)) || {}, {
-      clone: true,
-    })
-    return columns
+    const columns__ = resolveStaticColumns(t_.constructor)
+    // 公共 API 保留独立副本语义；实例推断字段由显式声明覆盖。
+    return merge(columns_, columns__, { clone: true })
   }
 
+  /** 直接按实例属性名赋值，不解析 DTO 名称或校验是否声明 Column；保留当前 this 代理。 */
   public setColumnData(key: string, value: any) {
     const target = this as any
     target[key] = value
     return this
   }
 
+  /** 直接按实例属性名读取，不执行序列化或分组过滤。 */
   public getColumnData(key: string) {
     const target = this as any
     return target[key]

@@ -1,133 +1,87 @@
-import { type ModelSnakeType, type ModelType, ModelBase } from '@model-base/core'
+/** 服务入口：按顺序协调参数处理、传输、DTO 转换和响应包装，不绑定具体 HTTP 客户端。 */
+import {
+  errorResponse,
+  prepareRequest,
+  serializeRequestParams,
+  transformPayload,
+  transformResponse,
+} from './_internal/requestPipeline'
 import type { Driver } from './api/Driver'
-import { type Wrapper } from './response'
+import type { IServiceParam, IServiceParamRequest, ServiceResponseType } from './service.types'
 
-/**
- * options: {
- *   allowEmptyData: 是否允许提交空数据 前提是params为ModelBase类型
- *   headers: {
- *     'Content-Type': 'multipart/form-data',
- *   },
- * },
- * wrapper: 解析返回数据
- */
-export type WrapperConstructor<Sub extends Wrapper> = Sub['data']
+// 保留从包入口或 CoreService 文件直接导入类型的两种历史用法。
+export type {
+  IServiceParam,
+  IServiceParamRequest,
+  ServiceResponseType,
+  WrapperConstructor,
+  WrapperType,
+} from './service.types'
 
-export type WrapperType<U> = U extends Wrapper
-  ? WrapperConstructor<U>
-  : U extends typeof ModelBase
-  ? InstanceType<U>
-  : any
-
-export interface IServiceParam<T, U> {
-  params?: ModelBase | any
-  options?: any
-  beforeParse?: (dto: any) => any
-  beforeDeserialize?: (data: any) => any
-  afterParse?: (serviceResponse: T) => T
-  afterDeserialize?: (serviceResponse: T) => T
-  wrapper?: U
-}
-
-export interface IServiceParamRequest<T, U> extends IServiceParam<T, U> {
-  type?: 'get' | 'post' | 'del' | 'put' | 'patch'
-}
-
-export type ServiceResponseType<R, U> = Omit<R, 'data'> & { data: WrapperType<U> }
-
+/** T 表示响应钩子的类型，R 表示响应容器类型；data 的具体类型由每次请求的 wrapper 推断。 */
 export class CoreService<T, R> {
-  public driver!: Driver
-  public serviceResponseType!: new (...args: any[]) => R
+  /** 传输适配器；必须提供 getApi()，不是直接传入 HTTP 客户端本身。 */
+  public driver: Driver
+  /** 响应类在运行时还需提供静态 create(dto, wrapper) 工厂。 */
+  public serviceResponseType: new (...args: any[]) => R
 
+  /** 注入传输驱动和响应类；不在服务内创建全局共享的客户端。 */
   constructor(adapter: Driver, serviceResponseType: new (...args: any[]) => R) {
     this.driver = adapter
     this.serviceResponseType = serviceResponseType
   }
 
+  /** GET 入口；通过 this.request 分发，保留子类覆盖请求流程的能力。 */
   public get<U>(url: string, data?: IServiceParam<T, U>) {
-    data = data || {}
-    return this.request(url, { ...data, type: 'get' }) as any as Promise<ServiceResponseType<R, U>>
+    return this.request(url, { ...(data || {}), type: 'get' }) as Promise<ServiceResponseType<R, U>>
   }
 
+  /** POST 入口；浅复制请求描述，不覆盖调用方的 type 配置。 */
   public post<U>(url: string, data?: IServiceParam<T, U>) {
-    data = data || {}
-    return this.request(url, { ...data, type: 'post' }) as any as Promise<ServiceResponseType<R, U>>
+    return this.request(url, { ...(data || {}), type: 'post' }) as Promise<ServiceResponseType<R, U>>
   }
 
+  /** DELETE 的历史方法名为 del，必须与适配器的方法名一致。 */
   public del<U>(url: string, data?: IServiceParam<T, U>) {
-    data = data || {}
-    return this.request(url, { ...data, type: 'del' }) as any as Promise<ServiceResponseType<R, U>>
+    return this.request(url, { ...(data || {}), type: 'del' }) as Promise<ServiceResponseType<R, U>>
   }
 
+  /** PUT 入口；转换规则与其他请求方法共享。 */
   public put<U>(url: string, data?: IServiceParam<T, U>) {
-    data = data || {}
-    return this.request(url, { ...data, type: 'put' }) as any as Promise<ServiceResponseType<R, U>>
+    return this.request(url, { ...(data || {}), type: 'put' }) as Promise<ServiceResponseType<R, U>>
   }
 
+  /** PATCH 入口；部分更新的服务端语义由适配器和接口决定。 */
   public patch<U>(url: string, data?: IServiceParam<T, U>) {
-    data = data || {}
-    return this.request(url, { ...data, type: 'patch' }) as any as Promise<ServiceResponseType<R, U>>
+    return this.request(url, { ...(data || {}), type: 'patch' }) as Promise<ServiceResponseType<R, U>>
   }
 
+  /**
+   * 请求生命周期。直接调用时 prepareRequest 可能替换 param_.params。
+   * 参数预处理位于 try 之外：它的异常继续使请求 Promise 拒绝；传输及后续转换错误转为响应。
+   * 钩子是同步转换函数，返回值替换下一阶段的输入，不自动等待异步钩子。
+   */
   public async request<T, U>(url: string, param_?: IServiceParamRequest<T, U>) {
-    const p = param_ || {}
-    let apiData: any
-    const wrapper = p?.wrapper as Wrapper
-    if (wrapper) {
-      if ((wrapper as Wrapper).constructor.prototype.constructor.isDataWrapper) {
-        p.params = wrapper.processParams?.(p.params)
-      }
-    }
+    const request = param_ || {}
+    prepareRequest(request)
     try {
-      apiData = await this.req(url, {
-        type: p?.type || 'get',
-        params: p?.params,
-        options: p?.options,
+      const dto = await this.req(url, {
+        type: request.type || 'get',
+        params: request.params,
+        options: request.options,
       })
-      if (p?.beforeParse) {
-        apiData = p.beforeParse(apiData)
-      }
-      if (p?.beforeDeserialize) {
-        apiData = p.beforeDeserialize(apiData)
-      }
-      let serviceResponse = (this.serviceResponseType as any).create(apiData, {}, p?.wrapper)
-      if (p?.afterParse) {
-        serviceResponse = p.afterParse.call(null, serviceResponse as any) as any as R
-      }
-      if (p?.afterDeserialize) {
-        serviceResponse = p.afterDeserialize.call(null, serviceResponse as any) as any as R
-      }
-      return serviceResponse
-    } catch (e: any) {
-      if (e.result_code) {
-        return (this.serviceResponseType as any).create(e)
-      } else {
-        const serviceResponse = (this.serviceResponseType as any).create({
-          result_code: 'service_error',
-        })
-        serviceResponse.serviceError = e
-        console.error('service_error', e)
-        return serviceResponse
-      }
+      const payload = transformPayload(dto, request)
+      const response = (this.serviceResponseType as any).create(payload, request.wrapper)
+      return transformResponse(response, request)
+    } catch (error) {
+      return errorResponse(this.serviceResponseType as any, error)
     }
   }
 
-  private req(
-    url: string,
-    data: {
-      type: 'get' | 'post' | 'del' | 'put' | 'patch'
-      params?: ModelBase | any
-      options?: any
-    },
-  ) {
-    let params = data.params
-    if (data.params && data.params.getSerializableObject) {
-      if (data.options && data.options.allowEmptyData) {
-        params = data.params?.getSerializableObject()
-      } else {
-        params = data.params?.getCleanSerializableObject()
-      }
-    }
+  /** 只负责模型参数序列化与适配器调用，不拼接 URL、不增加重试或异常吞噬。 */
+  private req(url: string, data: { type: 'get' | 'post' | 'del' | 'put' | 'patch'; params?: any; options?: any }) {
+    const params = serializeRequestParams(data.params, data.options)
+    // 保留 api 作为方法的 this；提取函数再调用可能破坏适配器内部状态访问。
     return this.driver.getApi()[data.type](url, params, data.options)
   }
 }

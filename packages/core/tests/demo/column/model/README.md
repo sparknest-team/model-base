@@ -2,66 +2,28 @@
 permalink: /column/model/
 ---
 
-# 嵌套模型
+# model：声明嵌套模型
 
-`model` 指定字段对应的 `ModelBase` 子类。DTO 中的普通对象或数组会递归转换为模型实例。
+[学习路线](/guide/roadmap/) · [示例索引](/guide/examples/) · [API 速查](/guide/reference/)
+
+## 解决什么问题
+
+将对象或数组递归创建为子模型，并让受支持的子字段参与变更追踪。
+
+## 示例与结果
+
+片段来自自动化测试。使用 User、Address、Item 的片段，请先使用[快速上手中的模型定义](/guide/start/)；其他类在片段内定义。所需 core API 从 `@model-base/core` 导入。
 
 ```ts
-class Address extends ModelBase {
-  @Column()
-  city?: string
-}
-
-class User extends ModelBase {
-  @Column({ model: () => Address })
-  address?: Address
-}
+<!-- @include: ../../learning/journey.spec.ts#nested -->
 ```
 
-推荐使用 `() => ModelClass`，以避免循环依赖和模块初始化顺序问题。
+输出注释由 `learning/journey.spec.ts` 中对应断言验证。各片段独立运行，不依赖上一页的修改状态。
 
-## 对象、数组与普通 JSON
+## 使用边界
 
-| 字段数据 | 是否配置 `model` | 结果 |
-|---|---|---|
-| 对象 | 是 | 子模型实例 |
-| 数组 | 是 | 子模型实例数组 |
-| 对象或数组 | 否 | 保持普通 JavaScript 数据 |
+可传类或 () => 类。惰性类型引用不是循环对象图支持。未声明 model/childType 的对象是普通数据，不保证其内部变更能自动检测与还原。
 
-没有配置 `model` 的普通对象不具备 `getChangedData()`、`update()` 等模型能力。
+## 下一步
 
-## 可运行示例
-
-::: tabs
-
-@tab 模型数组
-
-```ts :no-line-numbers
-<!-- @include: ./arr.spec.ts#model -->
-```
-
-```ts :no-line-numbers
-<!-- @include: ./arr.spec.ts#instance -->
-```
-
-@tab 单个模型
-
-```ts :no-line-numbers
-<!-- @include: ./obj.spec.ts#model -->
-```
-
-```ts :no-line-numbers
-<!-- @include: ./obj.spec.ts#instance -->
-```
-
-@tab 未配置 model
-
-```ts :no-line-numbers
-<!-- @include: ./diff.spec.ts#model -->
-```
-
-```ts :no-line-numbers
-<!-- @include: ./diff.spec.ts#instance -->
-```
-
-:::
+[继续阅读 →](/guide/nested/) · [返回按任务检索](/guide/examples/)

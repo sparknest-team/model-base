@@ -95,8 +95,9 @@ describe('ModelBase', () => {
   })
 
   describe('getClone', () => {
-    it('getClone.', () => {
+    it('keeps an explicitly read snapshot of a plain array independent', () => {
       const c = new ColumnCamelCase({ list: [] }, { serializeNamingStrategies: 'camelCase' })
+      c.getOriginalData() // No childType: array internals are not automatically tracked.
       c.list.push('test')
       expect(c.getOriginalData()).toEqual({ list: [], consumerList: [] })
     })

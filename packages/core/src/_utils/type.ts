@@ -8,10 +8,10 @@
 export const Type = Function
 
 /**
- * 类型守卫：检查值是否为构造函数类型
+ * 旧类型守卫：运行时仅检查 typeof === 'function'，不验证函数能否被 new 调用。
  *
  * @param v - 待检查的值
- * @returns 如果是构造函数则返回 true
+ * @returns 函数返回 true，包括不可构造的箭头函数
  */
 export function isType(v: any): v is Type<any> {
   return typeof v === 'function'

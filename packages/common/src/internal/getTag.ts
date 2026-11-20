@@ -1,7 +1,8 @@
 const toString = Object.prototype.toString
 
 /**
- * Gets the `toStringTag` of `value`.
+ * 获取 Object.prototype.toString 标签；显式区分 null/undefined。
+ * 不屏蔽自定义 Symbol.toStringTag，因此不是不可伪造的类型证明。
  *
  * @private
  * @param {*} value The value to query.

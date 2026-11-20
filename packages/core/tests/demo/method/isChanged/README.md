@@ -2,136 +2,28 @@
 permalink: /method/isChanged/
 ---
 
-# isChanged 变更检测
+# isChanged：判断相对保存点是否变化
 
-## 说明
+[学习路线](/guide/roadmap/) · [示例索引](/guide/examples/) · [API 速查](/guide/reference/)
 
-检测模型实例相对于上一个保存点是否有数据变更。常用于判断用户是否修改了表单数据。
+## 解决什么问题
 
-## 方法签名
+需要控制保存按钮或离开页面提示时，查询受支持字段是否不同于保存点。
 
-```ts
-isChanged(params?: {
-  group?: string           // 仅检测指定分组
-  excludeGroup?: string    // 排除指定分组
-  trim?: boolean           // 去除空格后比较
-  ignoreEmptyString?: boolean // 忽略空字符串变更
-}): boolean
-```
+## 示例与结果
 
-## 返回值
-
-| 返回值 | 说明 |
-|-------|------|
-| `true` | 有变更 |
-| `false` | 无变更 |
-
-## 检测范围
-
-只检测使用 `@Column()` 装饰器声明的属性，未声明的属性不参与检测。
-
-## 使用场景
-
-- **表单保存提示**：用户离开页面时提示"有未保存的更改"
-- **保存按钮状态**：无变更时禁用保存按钮
-- **数据同步检测**：判断本地数据是否与服务端一致
-
-## 使用示例
+片段来自自动化测试。使用 User、Address、Item 的片段，请先使用[快速上手中的模型定义](/guide/start/)；其他类在片段内定义。所需 core API 从 `@model-base/core` 导入。
 
 ```ts
-const user = new User({ user_name: 'John' })
-
-// 初始状态无变更
-user.isChanged() // false
-
-// 修改数据
-user.userName = 'Jane'
-user.isChanged() // true
-
-// 保存后重置状态
-user.saveChangedData()
-user.isChanged() // false
-
-// 还原到修改前
-user.userName = 'Modified'
-user.revertChangedData()
-user.isChanged() // false
+<!-- @include: ../../learning/journey.spec.ts#lifecycle -->
 ```
 
-## 与分组配合使用
+输出注释由 `learning/journey.spec.ts` 中对应断言验证。各片段独立运行，不依赖上一页的修改状态。
 
-```ts
-class User extends ModelBase {
-  @Column({ group: ['basic'] })
-  userName?: string
+## 使用边界
 
-  @Column({ group: ['advanced'] })
-  settings?: object
-}
+它不是只读一个 dirty 布尔值；可能序列化和比较。写回原值可以重新为 false。关闭快照时始终 false，不能据此认为业务数据没改。
 
-// 只检测 basic 分组
-user.isChanged({ group: 'basic' })
+## 下一步
 
-// 排除 advanced 分组
-user.isChanged({ excludeGroup: 'advanced' })
-```
-
-## 案例
-
-::: tabs
-
-@tab 案例一
-返回 **boolean** 值
-
-### 模型
-
-```ts :no-line-numbers
-<!-- @include: ./init.spec.ts#model -->
-```
-
-### 实例初始化
-
-```ts :no-line-numbers
-<!-- @include: ./init.spec.ts#instance -->
-```
-
-### 修改实例
-
-```ts :no-line-numbers
-<!-- @include: ./init.spec.ts#change -->
-```
-
-### 打印日志
-
-```ts :no-line-numbers
-<!-- @include: ./init.spec.ts#log -->
-```
-
-@tab 案例二
-判断当前对象通过 **@Column** 声明的字段是否变化
-
-### 模型
-
-```ts :no-line-numbers
-<!-- @include: ./noColumn.spec.ts#model -->
-```
-
-### 实例初始化
-
-```ts :no-line-numbers
-<!-- @include: ./noColumn.spec.ts#instance -->
-```
-
-### 修改实例
-
-```ts :no-line-numbers
-<!-- @include: ./noColumn.spec.ts#change -->
-```
-
-### 打印日志
-
-```ts :no-line-numbers
-<!-- @include: ./noColumn.spec.ts#log -->
-```
-
-:::
+[继续阅读 →](/method/getOriginalData/) · [返回按任务检索](/guide/examples/)

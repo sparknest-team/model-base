@@ -1,4 +1,4 @@
-import { Column, ModelBase, serialize } from '@model-base/core'
+import { Column, ModelBase } from '@model-base/core'
 class ConsumerItem extends ModelBase {
   @Column()
   id?: string
@@ -43,7 +43,14 @@ describe('mergeModel', () => {
       objRecordArr: { a: [{ id: '2', message: 'test2' }] },
       obj: { a: '2' },
     })
-    console.log(formData)
-    // expect(serialize(formData)).toEqual(expected)
+    expect(formData).toMatchObject({
+      id: expected.id,
+      message: expected.message,
+      list: expected.list,
+      objRecord: expected.obj_record,
+      objRecordArr: expected.obj_record_arr,
+    })
+    expect(formData.obj).toBeUndefined()
+    expect(listItem.id).toBe('org')
   })
 })

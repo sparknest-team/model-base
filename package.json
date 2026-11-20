@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "vuepress dev docs",
     "test": "jest",
+    "check:docs": "node scripts/check-docs.cjs",
     "build": "yarn build:lib && yarn build:doc",
     "build:lib": "yarn workspaces foreach --no-private -A -v run build:lib",
     "build:doc": "vuepress build docs --dest dist",

@@ -2,28 +2,28 @@
 permalink: /method/getColumnData/
 ---
 
-# 按字段名读取值
+# getColumnData：按实例属性名读取
 
-`getColumnData(key)` 根据运行时字段名读取模型属性。它读取的是字段值，不是 `@Column`
-元数据。静态字段名已知时应优先直接访问属性。
+[学习路线](/guide/roadmap/) · [示例索引](/guide/examples/) · [API 速查](/guide/reference/)
+
+## 解决什么问题
+
+在配置驱动的界面中，根据字符串属性名读取当前值。
+
+## 示例与结果
+
+片段来自自动化测试。使用 User、Address、Item 的片段，请先使用[快速上手中的模型定义](/guide/start/)；其他类在片段内定义。所需 core API 从 `@model-base/core` 导入。
 
 ```ts
-user.getColumnData('displayName')
-// 等价于 user.displayName
+<!-- @include: ../../learning/journey.spec.ts#access -->
 ```
 
-该方法主要用于动态表单、表格列配置和其他无法在编译期确定字段名的场景。
+输出注释由 `learning/journey.spec.ts` 中对应断言验证。各片段独立运行，不依赖上一页的修改状态。
 
-## 可运行示例
+## 使用边界
 
-```ts :no-line-numbers
-<!-- @include: ./init.spec.ts#model -->
-```
+不使用 DTO 字段名，不执行反序列化、不注册字段。字段名已知时直接访问 user.displayName 更清楚。
 
-```ts :no-line-numbers
-<!-- @include: ./init.spec.ts#instance -->
-```
+## 下一步
 
-```ts :no-line-numbers
-<!-- @include: ./init.spec.ts#log -->
-```
+[继续阅读 →](/method/setColumnData/) · [返回按任务检索](/guide/examples/)

@@ -1,4 +1,6 @@
 /**
+ * 判断非 null 的对象或函数；与 isObjectLike 的区别是函数也返回 true。
+ *
  * isObject({})
  * // => true
  *

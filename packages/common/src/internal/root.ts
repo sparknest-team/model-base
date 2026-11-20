@@ -1,3 +1,4 @@
+/** 跨环境全局对象探测；最后的 Function 回退可能受严格 CSP 限制，保留现有兼容策略。 */
 /* global globalThis, self */
 import { freeGlobal } from './freeGlobal'
 

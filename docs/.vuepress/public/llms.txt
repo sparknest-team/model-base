@@ -1,0 +1,28 @@
+# ModelBase
+
+> ModelBase 是 TypeScript 数据模型库。`@model-base/core` 负责 DTO 与模型之间的字段映射、序列化、嵌套模型和可选的变更追踪；`@model-base/service` 是可选的请求协调层。本文档描述仓库当前源码，可能早于 npm 发布版本。
+
+需要一次读取核心用法和边界时，优先打开下面的完整指南；仅需某个主题时按目录读取对应页面。不要把 TypeScript 字段类型当作运行时校验，也不要把模型的本地保存点当作服务器持久化。
+
+## 一次读完
+
+- [ModelBase 完整 AI 指南](/llms-full.txt): 自包含的概念、快速上手、配置、状态、动态模型、Vue 3、Node 和 service 用法。
+
+## 核心文档
+
+- [快速上手](/guide/start/): 安装、装饰器、模型创建与 DTO 输出。
+- [字段映射与转换](/guide/mapping/): name、aliasName、默认值、转换回调、分组与清理。
+- [编辑、保存与还原](/guide/editing/): 保存点、变更查询、update 与重填行为。
+- [嵌套模型与集合](/guide/nested/): 子模型、数组主键、字典和追踪边界。
+- [动态模型与列缓存](/guide/dynamic/): dynamicModelBase、columnsInValue 和 ColumnDefine。
+- [Node 与 Vue 3 集成](/guide/integration/): 内存开关与响应式代理。
+- [API 速查](/guide/reference/): 公共入口和常用选项。
+
+## 可选与维护
+
+- [本轮升级记录与 AI 项目校验任务](/modelbase-upgrade-audit.txt): 受影响行为、搜索命令、业务验证矩阵和报告格式。
+- [service 请求层](/guide/service/): Driver、传输适配器、响应包装器和错误处理。
+- [示例索引](/guide/examples/): 按任务查找可运行的教程测试。
+- [常见问题](/guide/faq/): 语义与兼容边界。
+- [迁移指南](/guide/migrate/): 已有项目的迁移检查清单。
+- [更新日志](/guide/changelog/): 区分仓库未发布改动与正式版本。

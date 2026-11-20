@@ -25,6 +25,7 @@
 import { getTag } from '../internal/getTag'
 import { isObjectLike } from './isObjectLike'
 
+/** 沿原型链寻找根原型，以支持来自不同环境的普通对象；类实例和数组不算普通对象。 */
 export function isPlainObject(value: any) {
   if (!isObjectLike(value) || getTag(value) != '[object Object]') {
     return false

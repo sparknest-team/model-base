@@ -2,35 +2,22 @@
 permalink: /guide/start/
 ---
 
-# 快速上手
+# 第 1 步：创建你的第一个模型
+
+目标：把接口返回的 `display_name` 映射为实例属性，再输出可提交的 DTO。
 
 ## 安装
 
-::: code-tabs#shell
-
-@tab npm
-
-```bash
+```sh
 npm install @model-base/core
 ```
 
-@tab yarn
+本文对应仓库当前源码。使用 npm 版本时，请对照[更新日志](/guide/changelog/)确认功能是否已发布。
 
-```bash
-yarn add @model-base/core
-```
+## 选择装饰器配置
 
-@tab pnpm
-
-```bash
-pnpm add @model-base/core
-```
-
-:::
-
-## 配置 TypeScript
-
-在 `tsconfig.json` 中添加以下配置：
+仓库使用 TypeScript 5 的新版装饰器（`experimentalDecorators: false`），也保留旧式装饰器兼容。
+先沿用项目实际使用的编译模式，不要把两套配置混用。旧式配置示例：
 
 ```json
 {
@@ -41,112 +28,33 @@ pnpm add @model-base/core
 }
 ```
 
-::: tip 提示
-- `experimentalDecorators`: 启用装饰器语法（同时支持新版 TypeScript 5.0+ 装饰器）
-- `useDefineForClassFields`: 必须设置为 `false`，否则会导致属性值为 `undefined`
-:::
+不需要 `reflect-metadata` 或 `emitDecoratorMetadata`。优先用 `Model.create()`；
+字段默认值写在 `@Column({ default: ... })`，避免类字段初始化器覆盖 DTO。
+不想使用装饰器时，可以直接学习[动态模型工厂](/guide/dynamic/)。
 
 ## 定义模型
 
-使用 `@Column` 装饰器标记需要序列化的属性：
+下面是后续教程共用的完整模型。第一步只关注 User 的 id、displayName、enabled；Address 和 Item 在嵌套章节展开。
 
 ```ts
-import { Column, ModelBase } from '@model-base/core'
-
-export class User extends ModelBase {
-  @Column({ primary: true })
-  id?: number
-
-  @Column()
-  userName?: string
-
-  @Column()
-  email?: string
-}
+<!-- @include: ../../packages/core/tests/demo/learning/journey.spec.ts#models -->
 ```
 
-## 创建实例
-
-支持多种方式创建模型实例：
-
-::: code-tabs
-
-@tab 构造函数
+## 创建实例并输出 DTO
 
 ```ts
-// 支持蛇形命名（后端常用格式）
-const user = new User({
-  id: 1,
-  user_name: 'John',
-  email: 'john@example.com'
-})
-
-// 也支持驼峰命名
-const user2 = new User({
-  id: 2,
-  userName: 'Jane',
-  email: 'jane@example.com'
-})
+<!-- @include: ../../packages/core/tests/demo/learning/journey.spec.ts#create -->
 ```
 
-@tab 静态方法
+观察三个结果：
 
-```ts
-// 推荐方式：使用 create 静态方法
-const user = User.create({
-  id: 1,
-  user_name: 'John',
-  email: 'john@example.com'
-})
-```
+1. DTO 的 `display_name` 进入实例的 `displayName`。
+2. 未声明的 `ignored` 不进入输出；这是默认行为，`columnsInValue` 是显式例外。
+3. 缺失值可以应用默认值。输出的是普通对象，不是 JSON 字符串；需要字符串时显式调用 `JSON.stringify(dto)`。
 
-:::
+## 完成检查
 
-## 序列化
+你应能回答：实例属性名与 DTO 字段名有什么区别？为什么 `ignored` 没有输出？
+先不要把类型注解当作运行时校验；需要转换数值时使用显式回调。
 
-将模型实例转换为普通对象，用于提交给后端 API：
-
-```ts
-// 获取序列化对象（默认蛇形命名）
-user.getSerializableObject()
-// { id: 1, user_name: 'John', email: 'john@example.com' }
-
-// 获取驼峰命名的对象
-user.getSerializableObject({ camelCase: true })
-// { id: 1, userName: 'John', email: 'john@example.com' }
-
-// 获取清理后的对象（移除空字符串、空数组、空对象）
-user.getCleanSerializableObject()
-```
-
-## 变更追踪
-
-ModelBase 自动追踪数据变化，方便实现增量提交：
-
-```ts
-const user = new User({ id: 1, user_name: 'John' })
-
-// 修改数据
-user.userName = 'Jane'
-user.email = 'jane@example.com'
-
-// 获取变更的数据
-user.getChangedData()
-// { user_name: 'Jane', email: 'jane@example.com' }
-
-// 检查是否有变更
-user.isChanged() // true
-
-// 还原到初始状态
-user.revertChangedData()
-
-// 保存当前状态为新的基准点
-user.saveChangedData()
-```
-
-## 下一步
-
-- [为什么选择 ModelBase](/guide/why/) - 了解 ModelBase 解决的问题
-- [基本概念](/guide/know/) - 深入理解核心概念
-- [@Column 装饰器](/column/default/) - 了解列配置选项
-- [实例方法](/method/getSerializableObject/) - 查看所有可用方法
+[下一步：核心概念 →](/guide/know/) · [查看完整示例目录](/guide/examples/)
