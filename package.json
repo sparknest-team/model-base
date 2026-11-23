@@ -13,7 +13,7 @@
     "clean-cache": "rm -rf docs/.vuepress/.cache && rm -rf docs/.vuepress/.temp && rm -rf node_modules/.vite",
     "postinstall": "patch-package",
     "changeset": "changeset",
-    "version-packages": "changeset version",
+    "version-packages": "changeset version && yarn install --mode=update-lockfile",
     "publish-packages": "changeset publish",
     "v": "changeset version",
     "pub": "changeset publish",
