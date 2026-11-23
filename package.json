@@ -5,6 +5,8 @@
   "scripts": {
     "dev": "vuepress dev docs",
     "test": "jest",
+    "check:types": "tsc -p tsconfig.packages.json --noEmit",
+    "lint": "eslint packages",
     "check:docs": "node scripts/check-docs.cjs",
     "build": "yarn build:lib && yarn build:doc",
     "build:lib": "yarn workspaces foreach --no-private -A -v run build:lib",
@@ -82,7 +84,6 @@
     "gulp-sass": "^5.1.0",
     "jest": "28.1.3",
     "jest-cli": "28.1.3",
-    "lerna": "^8.1.8",
     "posthtml-parser": "^0.11.0",
     "posthtml-render": "^3.0.0",
     "prettier": "^2.8.7",

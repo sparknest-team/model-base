@@ -26,6 +26,8 @@ jobs:
           node-version-file: .nvmrc
       - run: corepack enable
       - run: yarn install --immutable
+      - run: yarn lint
+      - run: yarn check:types
       - run: yarn build:lib
       - run: yarn check:docs
       - run: yarn test
