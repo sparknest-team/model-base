@@ -12,8 +12,11 @@
     "docs:llms": "node scripts/gen-llms.mjs",
     "clean-cache": "rm -rf docs/.vuepress/.cache && rm -rf docs/.vuepress/.temp && rm -rf node_modules/.vite",
     "postinstall": "patch-package",
-    "v": "lerna version --no-git-tag-version --no-private",
-    "pub": "lerna publish --no-git-tag-version  --no-private --dist-tag latest --registry=https://registry.npmjs.org",
+    "changeset": "changeset",
+    "version-packages": "changeset version",
+    "publish-packages": "changeset publish",
+    "v": "changeset version",
+    "pub": "changeset publish",
     "upload": "node scripts/push-doc.mjs"
   },
   "author": "",

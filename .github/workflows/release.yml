@@ -1,0 +1,49 @@
+name: Release
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+concurrency:
+  group: changesets-model-base-master
+  cancel-in-progress: false
+
+jobs:
+  version:
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - run: corepack enable
+      - run: yarn install --immutable
+      - name: Create or update version and changelog PR
+        id: changesets
+        uses: changesets/action@v1
+        with:
+          version: yarn version-packages
+          title: 'chore(release): version packages and update changelogs'
+          commit: 'chore(release): version packages and update changelogs'
+          commitMode: github-api
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Run Quality for the bot-created release PR
+        if: steps.changesets.outputs.pullRequestNumber != ''
+        uses: actions/github-script@v7
+        env:
+          PR_NUMBER: ${{ steps.changesets.outputs.pullRequestNumber }}
+        with:
+          script: |
+            const { data: pr } = await github.rest.pulls.get({ ...context.repo, pull_number: Number(process.env.PR_NUMBER) });
+            await github.rest.actions.createWorkflowDispatch({ ...context.repo, workflow_id: 'quality.yml', ref: pr.head.ref, inputs: { pull_request_number: String(pr.number) } });
