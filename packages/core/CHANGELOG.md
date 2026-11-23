@@ -1,5 +1,14 @@
 # @model-base/core
 
+## 1.2.2
+
+### Patch Changes
+
+- [#34](https://github.com/sparknest-team/model-base/pull/34) [`027e1da567543d2a2e4477b583240dceb191e0ae`](https://github.com/sparknest-team/model-base/commit/027e1da567543d2a2e4477b583240dceb191e0ae) Thanks [@sparknest-team](https://github.com/sparknest-team)! - 验证「Quality 通过后自动发布」完整链路（OIDC trusted publishing + provenance）
+
+- Updated dependencies [[`027e1da567543d2a2e4477b583240dceb191e0ae`](https://github.com/sparknest-team/model-base/commit/027e1da567543d2a2e4477b583240dceb191e0ae)]:
+  - @model-base/common@1.2.2
+
 ## 1.2.1
 
 ### Patch Changes
