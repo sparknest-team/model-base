@@ -32,6 +32,8 @@ jobs:
             const check = data.check_runs.filter(run => run.name === 'quality' && run.app?.slug === 'github-actions').sort((a, b) => b.id - a.id)[0];
             if (!check || check.status !== 'completed' || check.conclusion !== 'success') throw new Error('Run and pass Quality on this exact commit before publishing');
       - name: Publish to npm with OIDC trusted publishing
+        env:
+          NPM_CONFIG_LOGLEVEL: verbose
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
